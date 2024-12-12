@@ -1,5 +1,6 @@
 use httpdate::parse_http_date;
 use std::time::SystemTime;
+use std::fmt;
 
 #[derive(Debug, Clone)]
 pub struct Header {
@@ -79,6 +80,44 @@ pub enum HeaderName {
     // En-têtes de sécurité
     StrictTransportSecurity,
     Custom(String),
+}
+
+impl fmt::Display for Header {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}: {}", self.name, self.value)
+    }   
+}
+
+impl fmt::Display for HeaderName {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            HeaderName::ContentType => write!(f, "Content-Type"),
+            HeaderName::ContentLength => write!(f, "Content-Length"),
+            HeaderName::TransferEncoding => write!(f, "Transfer-Encoding"),
+            HeaderName::Connection => write!(f, "Connection"),
+            HeaderName::Date => write!(f, "Date"),
+            HeaderName::Host => write!(f, "Host"),
+            HeaderName::UserAgent => write!(f, "User-Agent"),
+            HeaderName::Accept => write!(f, "Accept"),
+            HeaderName::AcceptLanguage => write!(f, "Accept-Language"),
+            HeaderName::AcceptEncoding => write!(f, "Accept-Encoding"),
+            HeaderName::Server => write!(f, "Server"),
+            HeaderName::StatusCode => write!(f, "Status-Code"),
+            HeaderName::CacheControl => write!(f, "Cache-Control"),
+            HeaderName::ETag => write!(f, "ETag"),
+            HeaderName::LastModified => write!(f, "Last-Modified"),
+            HeaderName::StrictTransportSecurity => write!(f, "Strict-Transport-Security"),
+            HeaderName::Custom(ref name) => write!(f, "{}", name),
+        }
+    }
+    
+}
+
+impl fmt::Display for HeaderValue {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.value)
+    }
+    
 }
 
 impl Header {

@@ -1,6 +1,7 @@
 use serde_json;
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
+use std::fmt;
 
 #[derive(Debug, Clone)]
 pub enum Body {
@@ -15,6 +16,24 @@ pub enum Body {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct FormUrlEncoded {
     data: HashMap<String, String>
+}
+
+impl fmt::Display for Body {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Body::Text(text) => write!(f, "{}", text),
+            Body::Json(json) => write!(f, "{}", json),
+            Body::FormUrlEncoded(form) => {
+                let mut form_str = String::new();
+                for (key, value) in form.data.iter() {
+                    form_str.push_str(&format!("{}={}&", key, value));
+                }
+                write!(f, "{}", form_str)
+            },
+            Body::Binary(data) => write!(f, "{:?}", data),
+            Body::Empty => write!(f, "")
+        }
+    }
 }
 
 impl FormUrlEncoded {

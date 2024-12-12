@@ -93,8 +93,6 @@ pub fn parse_request(resquest: &str) -> Option<Request> {
     let mut body = None;
 
     if let Some(content_type) = get_header(headers.clone(), HeaderName::ContentType) {
-        println!("Content Type: {:?}", content_type);
-
         body = Some(Body::from_parsing(content_type.value.value.as_str(), lines.collect::<Vec<&str>>()[lines_num..].join("\n").into_bytes()));
     }
 
@@ -103,6 +101,5 @@ pub fn parse_request(resquest: &str) -> Option<Request> {
 }
 
 fn get_header(headers: Vec<Header>, name: HeaderName) -> Option<Header> {
-    println!("Headers: {:#?}", headers);
     headers.iter().find(|&h| h.name == name).cloned()
 }

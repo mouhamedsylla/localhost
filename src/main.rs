@@ -2,8 +2,10 @@ mod http;
 
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::net::{TcpListener, TcpStream};
+use http::header::{self, Header, HeaderName, HeaderValue, ContentType};
 use http::request::parse_request;
 use http::body::Body;
+use http::response::{Response, HttpStatusCode};
 
 fn handle_connection(mut stream: TcpStream) {
     let mut buffer = [0; 1024];
@@ -29,6 +31,26 @@ fn handle_connection(mut stream: TcpStream) {
     } else {
         println!("Not JSON");
     }
+
+    let mut headers: Vec<Header> = Vec::new();
+    headers.push(Header {
+        name: header::HeaderName::ContentType,
+        value: HeaderValue {
+            value: "application/json".to_string(),
+            parsed_value: Some(header::HeaderParsedValue::ContentType(ContentType::ApplicationJson)),
+        },
+    });
+
+    let response = Response::new(
+        "HTTP/1.1".to_string(), 
+        HttpStatusCode::Ok,
+        headers,
+        Some(Body::from_json(serde_json::json!({
+            "message": "Hello!"
+        })))
+    );
+
+    stream.write_all(response.to_string().as_bytes()).unwrap();
 }
 
 
