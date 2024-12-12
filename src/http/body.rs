@@ -57,10 +57,9 @@ impl Body {
 
     pub fn from_parsing(content_type: &str, data: Vec<u8>) -> Body {
         let data_str = String::from_utf8_lossy(&data);
-        println!("Raw data: {}", data_str);
         match content_type.trim() {
             "application/json" => {
-                let json = serde_json::from_slice(&data).expect("Error parsing JSON");
+                let json = serde_json::from_str(data_str.trim()).expect("Error parsing JSON");
                 println!("JSON: {:?}", json);
                 Body::Json(json)
             },

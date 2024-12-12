@@ -7,19 +7,28 @@ use http::body::Body;
 
 fn handle_connection(mut stream: TcpStream) {
     let mut buffer = [0; 1024];
-    stream.read(&mut buffer).unwrap();
+    //stream.read(&mut buffer).unwrap();
+    let bytes_read = stream.read(&mut buffer).unwrap();
 
-    let request_str = String::from_utf8_lossy(&buffer[..]);
+    let request_str = String::from_utf8_lossy(&buffer[..bytes_read]);
 
-    //println!("Requête : {}", request_str);
+    println!("Requête : {}", request_str);
 
     let request = parse_request(&request_str).unwrap();
 
-    // if let Body::Json(ref json) = request.body.unwrap() {
-    //     println!("JSON: {:?}", json);
-    // } else {
-    //     println!("Not JSON");
-    // }
+    //println!("Body: {:?}", request.body.unwrap());
+
+    if let Body::Text(ref text) = request.body.clone().unwrap() {
+        println!("Text: {:?}", text);
+    } else {
+        println!("Not text");
+    }
+
+    if let Body::Json(ref json) = request.body.unwrap() {
+        println!("JSON: {:?}", json);
+    } else {
+        println!("Not JSON");
+    }
 }
 
 

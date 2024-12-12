@@ -68,7 +68,10 @@ pub fn parse_request(resquest: &str) -> Option<Request> {
 
     let mut headers = Vec::new();
 
+    let mut lines_num = 0;
+
     for line in lines.clone() {
+        lines_num += 1;
         if line.is_empty() {
             break;
         }
@@ -91,8 +94,8 @@ pub fn parse_request(resquest: &str) -> Option<Request> {
 
     if let Some(content_type) = get_header(headers.clone(), HeaderName::ContentType) {
         println!("Content Type: {:?}", content_type);
-        
-        body = Some(Body::from_parsing(content_type.value.value.as_str(), lines.collect::<Vec<&str>>().join("\n").into_bytes()));
+
+        body = Some(Body::from_parsing(content_type.value.value.as_str(), lines.collect::<Vec<&str>>()[lines_num..].join("\n").into_bytes()));
     }
 
     Some(Request::new(method, parts[1].to_string(), parts[2].to_string(), headers, body))
