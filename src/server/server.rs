@@ -1,14 +1,18 @@
 use std::net::{TcpListener, TcpStream};
 use std::io::{Read, Write};
+use std::os::fd;
+use std::os::unix::io::{AsRawFd, RawFd};
+
+use libc::{epoll_create1, epoll_ctl, epoll_wait, EPOLLIN, EPOLLET, EPOLL_CTL_ADD, EPOLL_CTL_DEL};
 
 pub struct Host {
-    port: String,
-    server_name: String,
-    listener: TcpListener,
+    pub port: String,
+    pub server_name: String,
+    pub listener: TcpListener,
 }
 
 pub struct Server {
-    hosts: Vec<Host>,
+    pub hosts: Vec<Host>,
 }
 
 impl Host {
@@ -21,7 +25,7 @@ impl Host {
     }
 
     pub fn run(&self) {
-        println!("Serveur HTTP {} écoutant sur le port {}", self.server_name, self.port);
+        // println!("Serveur HTTP {} écoutant sur le port {}", self.server_name, self.port);
         for stream in self.listener.incoming() {
             let mut stream = stream.unwrap();
             handle_connection(&mut stream);
@@ -38,6 +42,30 @@ impl Server {
 
     pub fn run(&self) {
         for host in &self.hosts {
+            let epool_fd = unsafe {
+                epoll_create1(0)
+            };
+            if epool_fd < 0 {
+                panic!("Failed to create epoll file descriptor");
+            }
+
+            host.listener.set_nonblocking(true).unwrap();
+
+            let fd = host.listener.as_raw_fd();
+            
+            let mut event = libc::epoll_event {
+                events: (EPOLLIN | EPOLLET) as u32,
+                u64: fd as u64,
+            };
+
+            unsafe {
+                if epoll_ctl(epool_fd, EPOLL_CTL_ADD, fd, &mut event) < 0 {
+                    panic!("Failed to add file descriptor to epoll");
+                }
+            }
+
+            println!("Serveur HTTP {} écoutant sur le port {}", host.server_name, host.port);
+
             host.run();
         }
     }
