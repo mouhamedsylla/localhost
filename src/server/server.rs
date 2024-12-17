@@ -1,9 +1,10 @@
 use std::net::{TcpListener, TcpStream};
+use crate::http::status::HttpStatusCode;
 use std::io::{Read, Write};
 use std::os::fd;
 use std::os::unix::io::{AsRawFd, RawFd};
 
-use libc::{epoll_create1, epoll_ctl, epoll_wait, EPOLLIN, EPOLLET, EPOLL_CTL_ADD, EPOLL_CTL_DEL};
+use libc::{epoll_create1, epoll_ctl, EPOLLIN, EPOLLET, EPOLL_CTL_ADD };
 
 pub struct Host {
     pub port: String,
@@ -15,6 +16,7 @@ pub struct Server {
     pub hosts: Vec<Host>,
 }
 
+
 impl Host {
     pub fn new(port: &str, server_name: &str) -> Host {
         Host {
@@ -25,7 +27,6 @@ impl Host {
     }
 
     pub fn run(&self) {
-        // println!("Serveur HTTP {} écoutant sur le port {}", self.server_name, self.port);
         for stream in self.listener.incoming() {
             let mut stream = stream.unwrap();
             handle_connection(&mut stream);
@@ -92,8 +93,7 @@ fn handle_connection(stream: &mut TcpStream) {
     });
 
     let response = crate::http::response::Response::new(
-        "HTTP/1.1".to_string(), 
-        crate::http::response::HttpStatusCode::Ok,
+        HttpStatusCode::Ok,
         headers,
         Some(crate::http::body::Body::from_json(serde_json::json!({
             "message": "Hello!"

@@ -8,7 +8,7 @@ pub enum Body {
     Text(String),
     Json(serde_json::Value),
     FormUrlEncoded(FormUrlEncoded),
-  //  MultipartFormData(MultipartFormData),
+  //MultipartFormData(MultipartFormData),
     Binary(Vec<u8>),
     Empty
 }
@@ -72,26 +72,6 @@ impl Body {
 
     pub fn from_empty() -> Body {
         Body::Empty
-    }
-
-    pub fn from_parsing(content_type: &str, data: Vec<u8>) -> Body {
-        let data_str = String::from_utf8_lossy(&data);
-        match content_type.trim() {
-            "application/json" => {
-                let json = serde_json::from_str(data_str.trim()).expect("Error parsing JSON");
-                println!("JSON: {:?}", json);
-                Body::Json(json)
-            },
-            "application/x-www-form-urlencoded" => {
-                let form = FormUrlEncoded::new();
-                Body::FormUrlEncoded(form)
-            },
-            "text/plain" => {
-                let text = String::from_utf8(data).unwrap();
-                Body::Text(text)
-            },
-            _ => Body::Binary(data)
-        }
     }
 }
 

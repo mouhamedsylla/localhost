@@ -1,4 +1,3 @@
-use httpdate::parse_http_date;
 use std::time::SystemTime;
 use std::fmt;
 
@@ -7,7 +6,6 @@ pub struct Header {
     pub name: HeaderName,
     pub value: HeaderValue,
 }
-
 
 #[derive(Debug, Clone)]
 pub struct HeaderValue {
@@ -88,6 +86,19 @@ impl fmt::Display for Header {
     }   
 }
 
+impl fmt::Display for HeaderValue {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.value)
+    }
+    
+}
+
+impl Header {
+    pub fn new(name: HeaderName, value: HeaderValue) -> Header {
+        Header { name, value }
+    }
+}
+
 impl fmt::Display for HeaderName {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -113,19 +124,6 @@ impl fmt::Display for HeaderName {
     
 }
 
-impl fmt::Display for HeaderValue {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.value)
-    }
-    
-}
-
-impl Header {
-    pub fn new(name: HeaderName, value: HeaderValue) -> Header {
-        Header { name, value }
-    }
-}
-
 impl HeaderParsedValue {
     pub fn header_parsed_value(value: &str) -> HeaderParsedValue {
         match value {
@@ -147,51 +145,6 @@ impl HeaderParsedValue {
             _ => HeaderParsedValue::Raw,
         }
     }
-
-    // fn parse_content_type(value: &str) -> Option<HeaderParsedValue> {
-    //     match value {
-    //         "text/plain" => Some(HeaderParsedValue::ContentType(ContentType::TextPlain)),
-    //         "text/html" => Some(HeaderParsedValue::ContentType(ContentType::TextHtml)),
-    //         "application/json" => Some(HeaderParsedValue::ContentType(ContentType::ApplicationJson)),
-    //         "application/xml" => Some(HeaderParsedValue::ContentType(ContentType::ApplicationXml)),
-    //         "application/x-www-form-urlencoded" => {
-    //             Some(HeaderParsedValue::ContentType(ContentType::ApplicationFormUrlEncoded))
-    //         }
-    //         "multipart/form-data" => Some(HeaderParsedValue::ContentType(ContentType::MultipartFormData)),
-    //         _ => None,
-    //     }
-    // }
-
-    // fn parse_date(value: &str) -> Option<HeaderParsedValue> {
-    //     Some(HeaderParsedValue::Date(parse_http_date(value).unwrap()))
-    // }
-
-    // fn parse_content_length(value: &str) -> Option<HeaderParsedValue> {
-    //     Some(HeaderParsedValue::ContentLength(value.parse().unwrap()))
-    // }
-
-    // fn parse_connection(value: &str) -> Option<HeaderParsedValue> {
-    //     match value {
-    //         "keep-alive" => Some(HeaderParsedValue::Connection(Connection::KeepAlive)),
-    //         "close" => Some(HeaderParsedValue::Connection(Connection::Close)),
-    //         _ => None,
-    //     }
-    // }
-
-    // fn parse_transfer_encoding(value: &str) -> HeaderParsedValue {
-    //     match value {
-    //         "chunked" => HeaderParsedValue::TransferEncoding(TransferEncoding::Chunked),
-    //         "compress" => HeaderParsedValue::TransferEncoding(TransferEncoding::Compress),
-    //         "deflate" => HeaderParsedValue::TransferEncoding(TransferEncoding::Deflate),
-    //         "gzip" => HeaderParsedValue::TransferEncoding(TransferEncoding::Gzip),
-    //         "identity" => HeaderParsedValue::TransferEncoding(TransferEncoding::Identity),
-    //         _ => HeaderParsedValue::Custom(value.to_string()),
-    //     }
-    // }
-
-    // fn parse_server(value: &str) -> HeaderParsedValue {
-    //     HeaderParsedValue::Server(value.to_string())
-    // }
 }
 
 impl HeaderName {

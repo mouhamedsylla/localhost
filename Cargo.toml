@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+httparse = "1.9.5"
 httpdate = "1.0.3"
 libc = "0.2.168"
 mime = "0.3.17"

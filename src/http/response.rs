@@ -1,15 +1,7 @@
 use crate::http::header::Header;
 use crate::http::body::Body;
-
-use super::header;
-
-pub enum HttpStatusCode {
-    Ok = 200,
-    BadRequest = 400,
-    NotFound = 404,
-    InternalServerError = 500,
-    
-}
+use crate::http::status::HttpStatusCode;
+use crate::http::header::{HeaderName, HeaderValue, HeaderParsedValue, ContentType};
 
 pub struct Response {
     pub version: String,
@@ -20,16 +12,67 @@ pub struct Response {
 
 impl Response {
     pub fn new(
-        version: String,
         status_code: HttpStatusCode,
         headers: Vec<Header>,
         body: Option<Body>
     ) -> Response {
         Response {
-            version,
+            version: "HTTP/1.1".to_string(),
             status_code,
             headers,
             body
+        }
+    }
+
+    pub fn ok() -> Response {
+        Response::new(
+            HttpStatusCode::Ok,
+            Vec::new(),
+            None
+        )
+    }
+
+    pub fn not_found() -> Response {
+        Response::new(
+            HttpStatusCode::NotFound,
+            Vec::new(),
+            None
+        )
+    }
+
+    pub fn response_with_json(data: serde_json::Value) -> Response {
+        let mut headers = Vec::new();
+        headers.push(Header {
+            name: HeaderName::ContentType,
+            value: HeaderValue {
+                value: "application/json".to_string(),
+                parsed_value: Some(HeaderParsedValue::ContentType(ContentType::ApplicationJson)),
+            },
+        });
+
+        Response {
+            version: "HTTP/1.1".to_string(),
+            status_code: HttpStatusCode::Ok,
+            headers,
+            body: Some(Body::from_json(data))
+        }
+    }
+
+    pub fn response_with_html(data: &str) -> Response {
+        let mut headers = Vec::new();
+        headers.push(Header {
+            name: HeaderName::ContentType,
+            value: HeaderValue {
+                value: "text/html".to_string(),
+                parsed_value: Some(HeaderParsedValue::ContentType(ContentType::TextHtml))
+            }
+        });
+
+        Response { 
+            version: "HTTP/1.1".to_string(),
+            status_code: HttpStatusCode::Ok,
+            headers, 
+            body: Some(Body::from_text(data))
         }
     }
 
@@ -49,7 +92,4 @@ impl Response {
         response
     }
 
-    pub fn add_header() {
-    
-    }
 }
