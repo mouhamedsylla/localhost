@@ -1,104 +1,229 @@
+use std::collections::HashMap;
 use std::net::{TcpListener, TcpStream};
-use crate::http::status::HttpStatusCode;
-use std::io::{Read, Write};
-use std::os::fd;
 use std::os::unix::io::{AsRawFd, RawFd};
+use std::io::{Read, Write, ErrorKind};
 
-use libc::{epoll_create1, epoll_ctl, EPOLLIN, EPOLLET, EPOLL_CTL_ADD };
+use libc::{
+    epoll_create1, epoll_ctl, epoll_event, epoll_wait, 
+    EPOLLET, EPOLLIN, EPOLLHUP, EPOLLERR,
+    EPOLL_CTL_ADD, EPOLL_CTL_DEL, EPOLL_CTL_MOD
+};
+
+use crate::http::status::HttpStatusCode;
+
+const MAX_EVENTS: usize = 64;
+
+pub struct Connection {
+    pub stream: TcpStream,
+    pub client_fd: RawFd,
+    pub host_name: String,
+}
+
+impl Connection {
+    pub fn new(stream: TcpStream, host_name: String) -> Connection {
+        let client_fd = stream.as_raw_fd();
+        Connection {
+            stream,
+            client_fd,
+            host_name,
+        }
+    }
+}
 
 pub struct Host {
     pub port: String,
     pub server_name: String,
     pub listener: TcpListener,
+    pub fd: RawFd,
+}
+
+impl Host {
+    pub fn new(port: &str, server_name: &str) -> Host {
+        let listener = TcpListener::bind(format!("127.0.0.1:{}", port)).unwrap();
+        listener.set_nonblocking(true).unwrap();
+        
+        let fd = listener.as_raw_fd();
+
+        Host {
+            port: port.to_string(),
+            server_name: server_name.to_string(),
+            listener,
+            fd,
+        }
+    }
 }
 
 pub struct Server {
     pub hosts: Vec<Host>,
-}
-
-
-impl Host {
-    pub fn new(port: &str, server_name: &str) -> Host {
-        Host {
-            port: port.to_string(),
-            server_name: server_name.to_string(),
-            listener: TcpListener::bind(format!("127.0.0.1:{}", port)).unwrap(),
-        }
-    }
-
-    pub fn run(&self) {
-        for stream in self.listener.incoming() {
-            let mut stream = stream.unwrap();
-            handle_connection(&mut stream);
-        }
-    }
+    pub connections: HashMap<RawFd, Connection>,
+    pub epool_fd: RawFd,
 }
 
 impl Server {
     pub fn new() -> Server {
+        let epool_fd = unsafe { epoll_create1(0) };
+        
+        if epool_fd < 0 {
+            panic!("Failed to create epoll file descriptor");
+        }
+
         Server {
             hosts: Vec::new(),
+            connections: HashMap::new(),
+            epool_fd,
         }
     }
 
-    pub fn run(&self) {
-        for host in &self.hosts {
-            let epool_fd = unsafe {
-                epoll_create1(0)
+    pub fn add_host(&mut self, host: Host) {
+        // Enregistrer le listener de l'hôte dans l'epoll
+        let mut event = libc::epoll_event {
+            events: (EPOLLIN | EPOLLET) as u32,
+            u64: host.fd as u64,
+        };
+
+        unsafe {
+            if epoll_ctl(self.epool_fd, EPOLL_CTL_ADD, host.fd, &mut event) < 0 {
+                panic!("Failed to add listener to epoll");
+            }
+        }
+
+        self.hosts.push(host);
+    }
+
+    fn find_host_by_fd(&self, fd: RawFd) -> Option<&Host> {
+        self.hosts.iter().find(|&host| host.fd == fd)
+    }
+
+    fn handle_new_connection(&mut self, host: &Host) -> std::io::Result<()> {
+        match host.listener.accept() {
+            Ok((mut stream, _)) => {
+                stream.set_nonblocking(true)?;
+                
+                let client_fd = stream.as_raw_fd();
+
+                let mut event = libc::epoll_event {
+                    events: (EPOLLIN | EPOLLET) as u32,
+                    u64: client_fd as u64,
+                };
+
+                unsafe {
+                    if epoll_ctl(self.epool_fd, EPOLL_CTL_ADD, client_fd, &mut event) < 0 {
+                        eprintln!("Failed to add client to epoll");
+                    }
+                }
+
+                let connection = Connection::new(stream, host.server_name.clone());
+                self.connections.insert(client_fd, connection);
+            },
+            Err(e) => return Err(e),
+        }
+        Ok(())
+    }
+
+    fn handle_client_connection(&mut self, client_fd: RawFd) -> std::io::Result<()> {
+        if let Some(connection) = self.connections.get_mut(&client_fd) {
+            let mut buffer = [0; 1024];
+            match connection.stream.read(&mut buffer) {
+                Ok(0) => {
+                    // Connection closed by client
+                    unsafe {
+                        epoll_ctl(self.epool_fd, EPOLL_CTL_DEL, client_fd, std::ptr::null_mut());
+                    }
+                    self.connections.remove(&client_fd);
+                    return Ok(());
+                }
+                Ok(bytes_read) => {
+                    let request_str = String::from_utf8_lossy(&buffer[..bytes_read]);
+                    let request = crate::http::request::parse_request(&request_str);
+
+                    let mut headers: Vec<crate::http::header::Header> = Vec::new();
+                    headers.push(crate::http::header::Header {
+                        name: crate::http::header::HeaderName::ContentType,
+                        value: crate::http::header::HeaderValue {
+                            value: "application/json".to_string(),
+                            parsed_value: Some(crate::http::header::HeaderParsedValue::ContentType(
+                                crate::http::header::ContentType::ApplicationJson
+                            )),
+                        },
+                    });
+
+                    let response = crate::http::response::Response::new(
+                        HttpStatusCode::Ok,
+                        headers,
+                        Some(crate::http::body::Body::from_json(serde_json::json!({
+                            "message": "Hello, World!",
+                            "host": connection.host_name
+                        })))
+                    );
+
+                    connection.stream.write_all(response.to_string().as_bytes())?;
+                    connection.stream.flush()?;
+                }
+                Err(e) if e.kind() == ErrorKind::WouldBlock => {}
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(())
+    }
+
+    pub fn run(&mut self) -> std::io::Result<()> {
+        println!("Démarrage du serveur avec {} hôtes", self.hosts.len());
+
+        let mut events = vec![
+            epoll_event {
+                events: 0,
+                u64: 0,
+            }; 
+            MAX_EVENTS
+        ];
+
+        loop {
+            let num_events = unsafe {
+                epoll_wait(
+                    self.epool_fd, 
+                    events.as_mut_ptr(), 
+                    MAX_EVENTS as i32, 
+                    -1
+                )
             };
-            if epool_fd < 0 {
-                panic!("Failed to create epoll file descriptor");
+
+            if num_events < 0 {
+                panic!("Failed to wait for events");
             }
 
-            host.listener.set_nonblocking(true).unwrap();
+            for i in 0..num_events as usize {
+                let event = events[i];
+                let fd = event.u64 as i32;
 
-            let fd = host.listener.as_raw_fd();
-            
-            let mut event = libc::epoll_event {
-                events: (EPOLLIN | EPOLLET) as u32,
-                u64: fd as u64,
-            };
+                if (event.events & (EPOLLHUP | EPOLLERR) as u32) != 0 {
+                    // Handle error or hung up events
+                    unsafe {
+                        epoll_ctl(self.epool_fd, EPOLL_CTL_DEL, fd, std::ptr::null_mut());
+                    }
+                    self.connections.remove(&(fd as RawFd));
+                    continue;
+                }
 
-            unsafe {
-                if epoll_ctl(epool_fd, EPOLL_CTL_ADD, fd, &mut event) < 0 {
-                    panic!("Failed to add file descriptor to epoll");
+                if let Some(host) = self.find_host_by_fd(fd as RawFd) {
+                    // New connection on listener socket
+                    if let Err(e) = self.handle_new_connection(host) {
+                        eprintln!("Error accepting connection: {}", e);
+                        unsafe {
+                            epoll_ctl(self.epool_fd, EPOLL_CTL_DEL, fd, std::ptr::null_mut());
+                        }
+                        self.connections.remove(&(fd as RawFd));
+                    }
+                } else {
+                    // Existing connection
+                    if let Err(e) = self.handle_client_connection(fd as RawFd) {
+                        eprintln!("Error handling client connection: {}", e);
+                        unsafe {
+                            epoll_ctl(self.epool_fd, EPOLL_CTL_DEL, fd, std::ptr::null_mut());
+                        }
+                        self.connections.remove(&(fd as RawFd));
+                    }
                 }
             }
-
-            println!("Serveur HTTP {} écoutant sur le port {}", host.server_name, host.port);
-
-            host.run();
         }
     }
-}
-
-fn handle_connection(stream: &mut TcpStream) {
-    let mut buffer = [0; 1024];
-    let bytes_read = stream.read(&mut buffer).unwrap();
-
-    let request_str = String::from_utf8_lossy(&buffer[..bytes_read]);
-
-
-
-    let request = crate::http::request::parse_request(&request_str).unwrap();
-
-
-    let mut headers: Vec<crate::http::header::Header> = Vec::new();
-    headers.push(crate::http::header::Header {
-        name: crate::http::header::HeaderName::ContentType,
-        value: crate::http::header::HeaderValue {
-            value: "application/json".to_string(),
-            parsed_value: Some(crate::http::header::HeaderParsedValue::ContentType(crate::http::header::ContentType::ApplicationJson)),
-        },
-    });
-
-    let response = crate::http::response::Response::new(
-        HttpStatusCode::Ok,
-        headers,
-        Some(crate::http::body::Body::from_json(serde_json::json!({
-            "message": "Hello!"
-        })))
-    );
-
-    stream.write_all(response.to_string().as_bytes()).unwrap();
 }
