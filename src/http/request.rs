@@ -5,7 +5,7 @@ use httparse::Request as HttparseRequest;
 use std::fmt;
 
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HttpMethod {
     GET,
     POST,

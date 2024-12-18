@@ -33,6 +33,7 @@ pub enum ContentType {
     ApplicationXml,
     ApplicationFormUrlEncoded,
     MultipartFormData,
+    u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -134,6 +135,7 @@ impl HeaderParsedValue {
             "application/x-www-form-urlencoded" => {
                 HeaderParsedValue::ContentType(ContentType::ApplicationFormUrlEncoded)
             }
+            "content-length" => HeaderParsedValue::ContentLength(value.parse().unwrap()),
             "multipart/form-data" => HeaderParsedValue::ContentType(ContentType::MultipartFormData),
             "chunked" => HeaderParsedValue::TransferEncoding(TransferEncoding::Chunked),
             "compress" => HeaderParsedValue::TransferEncoding(TransferEncoding::Compress),
