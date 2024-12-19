@@ -33,6 +33,7 @@ impl Clone for Host {
         }
     }
 }
+
 impl Connection {
     pub fn new(stream: TcpStream, host_name: String) -> Connection {
         let client_fd = stream.as_raw_fd();

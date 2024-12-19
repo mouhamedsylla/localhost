@@ -1,29 +1,35 @@
 mod http;
 mod server;
-use server::server::Server;
+mod config;
 
+use server::server::Server;
 use crate::server::static_files::ServerStaticFiles;
+use config::config::load_config;
+use std::path::PathBuf;
 
 fn main() -> std::io::Result<()> {
     let mut servers = Server::new();
+    
+    let config = load_config()?;
+    
+    for host_config in config.servers {
+        let static_files = match host_config.static_files {
+            Some(sf_config) => Some(ServerStaticFiles::new(
+                PathBuf::from(sf_config.directory),
+                sf_config.default_page,
+                sf_config.list_directory
+            )?),
+            None => None,
+        };
 
-    let server1_dir = ServerStaticFiles::new(
-        std::path::PathBuf::from("static"),
-        "index.html".to_string(),
-        true
-    )?;
+        let host = server::server::Host::new(
+            &host_config.port,
+            &host_config.name,
+            static_files
+        );
 
-    let server2_dir = ServerStaticFiles::new(
-        std::path::PathBuf::from("static"),
-        "index.html".to_string(),
-        true
-    )?;
-    
-    let host1 = server::server::Host::new("8080", "Serveur HTTP 1", Some(server1_dir));
-    let host2 = server::server::Host::new("8081", "Serveur HTTP 2", None);
-    
-    servers.add_host(host1);
-    servers.add_host(host2);
-    
+        servers.add_host(host);
+    }
+
     servers.run()
 }
