@@ -2,19 +2,17 @@ use std::collections::HashMap;
 use std::net::{TcpListener, TcpStream};
 use std::os::unix::io::{AsRawFd, RawFd};
 use std::io::{Read, Write, ErrorKind};
-use crate::http::response;
+use crate::http::body::Body;
+use crate::http::response::ResponseBuilder;
 use crate::server::static_files::ServerStaticFiles;
 use crate::http::request::HttpMethod;
-use crate::http::header::{Header, HeaderName, HeaderValue, HeaderParsedValue, ContentType};
-
+use crate::http::header::Header;
 
 use libc::{
     epoll_create1, epoll_ctl, epoll_event, epoll_wait, 
     EPOLLET, EPOLLIN, EPOLLHUP, EPOLLERR, EPOLLOUT,
-    EPOLL_CTL_ADD, EPOLL_CTL_DEL, EPOLL_CTL_MOD
+    EPOLL_CTL_ADD, EPOLL_CTL_DEL,
 };
-
-use crate::http::status::HttpStatusCode;
 
 const MAX_EVENTS: usize = 64;
 
@@ -160,37 +158,34 @@ impl Server {
                 Ok(bytes_read) => {
                     let request_str = String::from_utf8_lossy(&buffer[..bytes_read]);
                     if let Some(request) = crate::http::request::parse_request(&request_str) {
-                        //let host = self.find_host_by_fd(client_fd).unwrap();
                         let static_files = host.static_files.as_ref().unwrap();
                         if request.method == HttpMethod::GET {
+
                             match static_files.handle_stactic_file_serve(&request.uri) {
-                                Ok(content) => {
-                                    let mut headers  = Vec::new();
-                                    headers.push(Header {
-                                        name: HeaderName::ContentLength,
-                                        value: HeaderValue {
-                                            value: content.len().to_string(),
-                                            parsed_value: Some(HeaderParsedValue::ContentType(ContentType::u64)),
+                                Ok(result) => {
+                                    let (content, mime) = result;
+                                    let mime_str = match mime {
+                                        Some(mime) => mime.to_string(),
+                                        None => "text/plain".to_string(),
+                                    };
+
+                                    let content_type = Header::from_mime(&mime_str);
+
+                                    let body = Body::from_mime(&mime_str, content);
+                                    let response_builder = ResponseBuilder::new();
+                                    
+                                    
+                                    match body {
+                                        Ok(body) => {
+                                            let response = response_builder.body(body).header(content_type);
+                                            connection.stream.write_all(response.build().to_string().as_bytes())?;
                                         },
-                                    });
+                                        Err(e) => {
+                                            let response = response_builder.body(Body::text(&e.to_string())).header(Header::from_mime("text/plain"));
+                                            connection.stream.write_all(response.build().to_string().as_bytes())?;
+                                        }
+                                    }
 
-                                    headers.push(Header {
-                                        name: HeaderName::ContentType,
-                                        value: HeaderValue {
-                                            value: "text/html".to_string(),
-                                            parsed_value: Some(HeaderParsedValue::ContentType(ContentType::TextHtml)),
-                                        },
-                                    });
-
-                                    let html = String::from_utf8_lossy(&content);
-
-                                    let response = response::Response::new(
-                                        HttpStatusCode::Ok,
-                                        headers,
-                                        Some(crate::http::body::Body::from_text(&html.to_string()))
-                                    );
-
-                                    connection.stream.write_all(response.to_string().as_bytes())?;
                                     connection.stream.flush()?;
                                 },
                                 Err(e) => {
@@ -199,33 +194,6 @@ impl Server {
                             }
                         }
                     }
-
-                    
-
-                    // let mut headers: Vec<crate::http::header::Header> = Vec::new();
-                    // headers.push(crate::http::header::Header {
-                    //     name: crate::http::header::HeaderName::ContentType,
-                    //     value: crate::http::header::HeaderValue {
-                    //         value: "application/json".to_string(),
-                    //         parsed_value: Some(crate::http::header::HeaderParsedValue::ContentType(
-                    //             crate::http::header::ContentType::ApplicationJson
-                    //         )),
-                    //     },
-                    // });
-
-                    // //println!("Received request: {:?}", request);
-
-                    // let response = crate::http::response::Response::new(
-                    //     HttpStatusCode::Ok,
-                    //     headers,
-                    //     Some(crate::http::body::Body::from_json(serde_json::json!({
-                    //         "message": "Hello, World!",
-                    //         "host": connection.host_name
-                    //     })))
-                    // );
-
-                    // connection.stream.write_all(response.to_string().as_bytes())?;
-                    // connection.stream.flush()?;  // Forcer l'envoi des données
 
                     // Fermer la connexion après l'envoi
                     unsafe {

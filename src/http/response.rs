@@ -10,6 +10,49 @@ pub struct Response {
     pub body: Option<Body>
 }
 
+pub struct ResponseBuilder {
+    version: String,
+    status_code: HttpStatusCode,
+    headers: Vec<Header>,
+    body: Option<Body>
+}
+
+impl ResponseBuilder {
+    pub fn new() -> ResponseBuilder {
+        ResponseBuilder {
+            version: "HTTP/1.1".to_string(),
+            status_code: HttpStatusCode::Ok,
+            headers: Vec::new(),
+            body: None
+        }
+    }
+
+    pub fn version(mut self, version: String) -> ResponseBuilder {
+        self.version = version;
+        self
+    }
+
+    pub fn status_code(mut self, status_code: HttpStatusCode) -> ResponseBuilder {
+        self.status_code = status_code;
+        self
+    }
+
+    pub fn header(mut self, header: Header) -> ResponseBuilder {
+        self.headers.push(header);
+        self
+    }
+
+    pub fn body(mut self, body: Body) -> ResponseBuilder {
+        self.body = Some(body);
+        self
+    }
+
+    pub fn build(self) -> Response {
+        Response::new(self.status_code, self.headers, self.body)
+    }
+}
+
+
 impl Response {
     pub fn new(
         status_code: HttpStatusCode,
@@ -54,7 +97,7 @@ impl Response {
             version: "HTTP/1.1".to_string(),
             status_code: HttpStatusCode::Ok,
             headers,
-            body: Some(Body::from_json(data))
+            body: Some(Body::json(data))
         }
     }
 
@@ -72,7 +115,7 @@ impl Response {
             version: "HTTP/1.1".to_string(),
             status_code: HttpStatusCode::Ok,
             headers, 
-            body: Some(Body::from_text(data))
+            body: Some(Body::text(data))
         }
     }
 

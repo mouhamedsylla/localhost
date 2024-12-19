@@ -1,6 +1,7 @@
 use std::time::SystemTime;
 use std::fmt;
 
+// ============= Main Structures =============
 #[derive(Debug, Clone)]
 pub struct Header {
     pub name: HeaderName,
@@ -13,6 +14,7 @@ pub struct HeaderValue {
     pub parsed_value: Option<HeaderParsedValue>,
 }
 
+// ============= Header Type Enums =============
 #[derive(Debug, Clone)]
 pub enum HeaderParsedValue {
     ContentType(ContentType),
@@ -26,6 +28,40 @@ pub enum HeaderParsedValue {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HeaderName {
+    // Content headers
+    ContentType,
+    ContentLength,
+    
+    // Connection headers
+    Connection,
+    TransferEncoding,
+    Host,
+    
+    // Accept headers
+    Accept,
+    AcceptLanguage,
+    AcceptEncoding,
+    
+    // Response headers
+    Server,
+    StatusCode,
+    Date,
+    
+    // Cache headers
+    CacheControl,
+    ETag,
+    LastModified,
+    
+    // Security headers
+    StrictTransportSecurity,
+    
+    // Custom headers
+    Custom(String),
+}
+
+// ============= Specific Value Enums =============
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ContentType {
     TextPlain,
     TextHtml,
@@ -33,7 +69,7 @@ pub enum ContentType {
     ApplicationXml,
     ApplicationFormUrlEncoded,
     MultipartFormData,
-    u64,
+    Raw,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -51,124 +87,140 @@ pub enum Connection {
     Close,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum HeaderName {
-    // En-têtes généraux
-    ContentType,
-    ContentLength,
-    TransferEncoding,
-    Connection,
-    Date,
+// ============= Header Implementations =============
+impl Header {
+    pub fn new(name: HeaderName, value: HeaderValue) -> Header {
+        Header { name, value }
+    }
 
-    // En-têtes de requête
-    Host,
-    UserAgent,
-    Accept,
-    AcceptLanguage,
-    AcceptEncoding,
-
-    // En-têtes de réponse
-    Server,
-    StatusCode,
-
-    // En-têtes de cache
-    CacheControl,
-    ETag,
-    LastModified,
-
-    // En-têtes de sécurité
-    StrictTransportSecurity,
-    Custom(String),
+    pub fn from_mime(mime: &str) -> Header {
+        Header {
+            name: HeaderName::ContentType,
+            value: HeaderValue {
+                value: mime.to_string(),
+                parsed_value: Some(HeaderParsedValue::ContentType(
+                    ContentType::from_str(mime)
+                )),
+            },
+        }
+    }
 }
 
+// ============= HeaderName Implementations =============
+impl HeaderName {
+    pub fn from_str(name: &str) -> Self {
+        match name.to_lowercase().as_str() {
+            "content-type" => HeaderName::ContentType,
+            "content-length" => HeaderName::ContentLength,
+            "transfer-encoding" => HeaderName::TransferEncoding,
+            "connection" => HeaderName::Connection,
+            "date" => HeaderName::Date,
+            "host" => HeaderName::Host,
+            "accept" => HeaderName::Accept,
+            "accept-language" => HeaderName::AcceptLanguage,
+            "accept-encoding" => HeaderName::AcceptEncoding,
+            "server" => HeaderName::Server,
+            "status-code" => HeaderName::StatusCode,
+            "cache-control" => HeaderName::CacheControl,
+            "etag" => HeaderName::ETag,
+            "last-modified" => HeaderName::LastModified,
+            "strict-transport-security" => HeaderName::StrictTransportSecurity,
+            _ => HeaderName::Custom(name.to_string()),
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            HeaderName::ContentType => "Content-Type",
+            HeaderName::ContentLength => "Content-Length",
+            HeaderName::TransferEncoding => "Transfer-Encoding",
+            HeaderName::Connection => "Connection",
+            HeaderName::Date => "Date",
+            HeaderName::Host => "Host",
+            HeaderName::Accept => "Accept",
+            HeaderName::AcceptLanguage => "Accept-Language",
+            HeaderName::AcceptEncoding => "Accept-Encoding",
+            HeaderName::Server => "Server",
+            HeaderName::StatusCode => "Status-Code",
+            HeaderName::CacheControl => "Cache-Control",
+            HeaderName::ETag => "ETag",
+            HeaderName::LastModified => "Last-Modified",
+            HeaderName::StrictTransportSecurity => "Strict-Transport-Security",
+            HeaderName::Custom(_) => "", // Returns empty string for custom headers
+        }
+    }
+}
+
+// ============= ContentType Implementations =============
+impl ContentType {
+    pub fn from_str(value: &str) -> Self {
+        match value.to_lowercase().as_str() {
+            "text/plain" => ContentType::TextPlain,
+            "text/html" => ContentType::TextHtml,
+            "application/json" => ContentType::ApplicationJson,
+            "application/xml" => ContentType::ApplicationXml,
+            "application/x-www-form-urlencoded" => ContentType::ApplicationFormUrlEncoded,
+            "multipart/form-data" => ContentType::MultipartFormData,
+            _ => ContentType::Raw,
+        }
+    }
+}
+
+// ============= HeaderParsedValue Implementations =============
+impl HeaderParsedValue {
+    pub fn from_str(header_name: &HeaderName, value: &str) -> Self {
+        match header_name {
+            HeaderName::ContentType => {
+                HeaderParsedValue::ContentType(ContentType::from_str(value))
+            }
+            HeaderName::ContentLength => {
+                if let Ok(length) = value.parse() {
+                    HeaderParsedValue::ContentLength(length)
+                } else {
+                    HeaderParsedValue::Raw
+                }
+            }
+            HeaderName::TransferEncoding => match value.to_lowercase().as_str() {
+                "chunked" => HeaderParsedValue::TransferEncoding(TransferEncoding::Chunked),
+                "compress" => HeaderParsedValue::TransferEncoding(TransferEncoding::Compress),
+                "deflate" => HeaderParsedValue::TransferEncoding(TransferEncoding::Deflate),
+                "gzip" => HeaderParsedValue::TransferEncoding(TransferEncoding::Gzip),
+                "identity" => HeaderParsedValue::TransferEncoding(TransferEncoding::Identity),
+                _ => HeaderParsedValue::Raw,
+            },
+            HeaderName::Connection => match value.to_lowercase().as_str() {
+                "keep-alive" => HeaderParsedValue::Connection(Connection::KeepAlive),
+                "close" => HeaderParsedValue::Connection(Connection::Close),
+                _ => HeaderParsedValue::Raw,
+            },
+            HeaderName::Server => HeaderParsedValue::Server(value.to_string()),
+            HeaderName::Date => {
+                // TODO: Implement date parsing
+                HeaderParsedValue::Raw
+            }
+            _ => HeaderParsedValue::Custom(value.to_string()),
+        }
+    }
+}
+
+// ============= Display Implementations =============
 impl fmt::Display for Header {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}: {}", self.name, self.value)
-    }   
+    }
 }
 
 impl fmt::Display for HeaderValue {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.value)
     }
-    
-}
-
-impl Header {
-    pub fn new(name: HeaderName, value: HeaderValue) -> Header {
-        Header { name, value }
-    }
 }
 
 impl fmt::Display for HeaderName {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            HeaderName::ContentType => write!(f, "Content-Type"),
-            HeaderName::ContentLength => write!(f, "Content-Length"),
-            HeaderName::TransferEncoding => write!(f, "Transfer-Encoding"),
-            HeaderName::Connection => write!(f, "Connection"),
-            HeaderName::Date => write!(f, "Date"),
-            HeaderName::Host => write!(f, "Host"),
-            HeaderName::UserAgent => write!(f, "User-Agent"),
-            HeaderName::Accept => write!(f, "Accept"),
-            HeaderName::AcceptLanguage => write!(f, "Accept-Language"),
-            HeaderName::AcceptEncoding => write!(f, "Accept-Encoding"),
-            HeaderName::Server => write!(f, "Server"),
-            HeaderName::StatusCode => write!(f, "Status-Code"),
-            HeaderName::CacheControl => write!(f, "Cache-Control"),
-            HeaderName::ETag => write!(f, "ETag"),
-            HeaderName::LastModified => write!(f, "Last-Modified"),
-            HeaderName::StrictTransportSecurity => write!(f, "Strict-Transport-Security"),
             HeaderName::Custom(ref name) => write!(f, "{}", name),
-        }
-    }
-    
-}
-
-impl HeaderParsedValue {
-    pub fn header_parsed_value(value: &str) -> HeaderParsedValue {
-        match value {
-            "text/plain" => HeaderParsedValue::ContentType(ContentType::TextPlain),
-            "text/html" => HeaderParsedValue::ContentType(ContentType::TextHtml),
-            "application/json" => HeaderParsedValue::ContentType(ContentType::ApplicationJson),
-            "application/xml" => HeaderParsedValue::ContentType(ContentType::ApplicationXml),
-            "application/x-www-form-urlencoded" => {
-                HeaderParsedValue::ContentType(ContentType::ApplicationFormUrlEncoded)
-            }
-            "content-length" => HeaderParsedValue::ContentLength(value.parse().unwrap()),
-            "multipart/form-data" => HeaderParsedValue::ContentType(ContentType::MultipartFormData),
-            "chunked" => HeaderParsedValue::TransferEncoding(TransferEncoding::Chunked),
-            "compress" => HeaderParsedValue::TransferEncoding(TransferEncoding::Compress),
-            "deflate" => HeaderParsedValue::TransferEncoding(TransferEncoding::Deflate),
-            "gzip" => HeaderParsedValue::TransferEncoding(TransferEncoding::Gzip),
-            "identity" => HeaderParsedValue::TransferEncoding(TransferEncoding::Identity),
-            "keep-alive" => HeaderParsedValue::Connection(Connection::KeepAlive),
-            "close" => HeaderParsedValue::Connection(Connection::Close),
-            _ => HeaderParsedValue::Raw,
-        }
-    }
-}
-
-impl HeaderName {
-    pub fn parse_header_name(name: &str) -> HeaderName {
-        match name {
-            "Content-Type" => HeaderName::ContentType,
-            "Content-Length" => HeaderName::ContentLength,
-            "Transfer-Encoding" => HeaderName::TransferEncoding,
-            "Connection" => HeaderName::Connection,
-            "Date" => HeaderName::Date,
-            "Host" => HeaderName::Host,
-            "User-Agent" => HeaderName::UserAgent,
-            "Accept" => HeaderName::Accept,
-            "Accept-Language" => HeaderName::AcceptLanguage,
-            "Accept-Encoding" => HeaderName::AcceptEncoding,
-            "Server" => HeaderName::Server,
-            "Status-Code" => HeaderName::StatusCode,
-            "Cache-Control" => HeaderName::CacheControl,
-            "ETag" => HeaderName::ETag,
-            "Last-Modified" => HeaderName::LastModified,
-            "Strict-Transport-Security" => HeaderName::StrictTransportSecurity,
-            _ => HeaderName::Custom(name.to_string()),
+            _ => write!(f, "{}", self.as_str()),
         }
     }
 }

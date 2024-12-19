@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 pub enum HttpStatusCode {
     Ok = 200,
     Created = 201,

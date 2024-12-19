@@ -1,5 +1,8 @@
 use std::{io, fs, io::Read};
 use std::path::{Path, PathBuf};
+use mime_guess::from_path;
+
+pub type mime = String;
 
 #[derive(Debug, Clone)]
 pub struct ServerStaticFiles {
@@ -21,13 +24,13 @@ impl ServerStaticFiles {
         }
 
         // list directory content
-        if directory.is_dir() {
-            for entry in fs::read_dir(&directory)? {
-                let entry = entry?;
-                let path = entry.path();
-                println!("{:?}", path);
-            }
-        }
+        // if directory.is_dir() {
+        //     for entry in fs::read_dir(&directory)? {
+        //         let entry = entry?;
+        //         let path = entry.path();
+        //         println!("{:?}", path);
+        //     }
+        // }
 
         Ok(ServerStaticFiles {
             directory,
@@ -36,32 +39,32 @@ impl ServerStaticFiles {
         })
     }
 
-    fn serve_file(&self, path: &Path) -> io::Result<Vec<u8>> {
-        println!("Serving file: {:?}", path);
-        // if !path.is_file() {
-        //     return Err(io::Error::new(io::ErrorKind::NotFound, "File not found"));
-        // }
+    fn serve_file(&self, path: &Path) -> io::Result<(Vec<u8>, Option<mime>)> {
+        if !path.is_file() {
+            return Err(io::Error::new(io::ErrorKind::NotFound, "File not found"));
+        }
         
-
         let mut file = fs::File::open(path)?;
         let mut buffer = Vec::new();
+        let mime = self.get_mime_type(path.to_str().unwrap());
         file.read_to_end(&mut buffer)?;
 
-        Ok(buffer)
+        Ok((buffer, Some(mime)))
     }
 
-    pub fn handle_stactic_file_serve(&self, path: &str) -> io::Result<Vec<u8>> {
+    pub fn handle_stactic_file_serve(&self, path: &str) -> io::Result<(Vec<u8>, Option<mime>)> {
         let path = path.trim_start_matches('/');
-        println!("Requested path: {}", path);
         let full_path = self.directory.join(path);
-
-        println!("Full path: {:?}", full_path);
 
         if full_path.is_dir() {
             let message = "Directory listing is not allowed";
-            return Ok(message.as_bytes().to_vec());
+            return Ok((message.as_bytes().to_vec(), None));
         }
 
         self.serve_file(&full_path)
+    }
+
+    fn get_mime_type(&self, path: &str) -> mime {
+    from_path(path).first_or_octet_stream().to_string()
     }
 }

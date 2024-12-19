@@ -18,6 +18,7 @@ pub enum HttpMethod {
     TRACE    
 }
 
+
 #[derive(Debug, Clone)]
 pub struct Request {
     pub method: HttpMethod,
@@ -78,6 +79,10 @@ impl Request {
         request
     }
 
+    pub fn get_header(&self, name: HeaderName) -> Option<Header> {
+        self.headers.iter().find(|&h| h.name == name).cloned()
+    }
+
 }
 
 pub fn parse_request(request: &str) -> Option<Request> {
@@ -88,10 +93,10 @@ pub fn parse_request(request: &str) -> Option<Request> {
     let uri = req.path.unwrap();
     let version = req.version.unwrap();
     let headers = req.headers.iter().map(|h| Header::new(
-        HeaderName::parse_header_name(h.name),
+        HeaderName::from_str(h.name),
         HeaderValue {
             value: String::from_utf8_lossy(h.value).to_string(),
-            parsed_value: Some(HeaderParsedValue::header_parsed_value(String::from_utf8_lossy(h.value).trim()))
+            parsed_value: Some(HeaderParsedValue::from_str(&HeaderName::from_str(h.name), String::from_utf8_lossy(h.value).trim()))
         }
     )).collect::<Vec<Header>>();
 

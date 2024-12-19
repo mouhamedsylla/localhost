@@ -1,7 +1,6 @@
 #[cfg(test)]
 mod tests {
 
-    use super::*;
     use crate::http::header::{Header, HeaderName, HeaderValue, HeaderParsedValue, ContentType};
     use crate::http::request::{Request, HttpMethod};
     use crate::http::response::Response;
@@ -39,7 +38,7 @@ mod tests {
         let response = Response::new(
             HttpStatusCode::Ok,
             headers.clone(),
-            Some(Body::from_json(serde_json::json!({"message": "test"})))
+            Some(Body::json(serde_json::json!({"message": "test"})))
         );
 
         assert_eq!(response.version, "HTTP/1.1");
@@ -72,7 +71,7 @@ mod tests {
         let response = Response::new(
             HttpStatusCode::Ok,
             headers,
-            Some(Body::from_text("Hello"))
+            Some(Body::text("Hello"))
         );
 
         let response_str = response.to_string();

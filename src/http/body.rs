@@ -3,43 +3,133 @@ use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
 use std::fmt;
 
+// ============= Type Definitions =============
+pub type JsonValue = serde_json::Value;
+pub type BinaryData = Vec<u8>;
+pub type FormData = HashMap<String, String>;
+
+// ============= Main Structures =============
 #[derive(Debug, Clone)]
 pub enum Body {
     Text(String),
-    Json(serde_json::Value),
+    Json(JsonValue),
     FormUrlEncoded(FormUrlEncoded),
-  //MultipartFormData(MultipartFormData),
-    Binary(Vec<u8>),
-    Empty
+    // TODO: Implement MultipartFormData
+    // MultipartFormData(MultipartFormData),
+    Binary(BinaryData),
+    Empty,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct FormUrlEncoded {
-    data: HashMap<String, String>
+    data: FormData,
 }
 
-impl fmt::Display for Body {
+// ============= Error Handling =============
+#[derive(Debug)]
+pub enum BodyError {
+    InvalidUtf8(String),
+    InvalidJson(String),
+    UnsupportedMimeType(String),
+    ParseError(String),
+}
+
+impl std::error::Error for BodyError {}
+
+impl fmt::Display for BodyError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Body::Text(text) => write!(f, "{}", text),
-            Body::Json(json) => write!(f, "{}", json),
-            Body::FormUrlEncoded(form) => {
-                let mut form_str = String::new();
-                for (key, value) in form.data.iter() {
-                    form_str.push_str(&format!("{}={}&", key, value));
-                }
-                write!(f, "{}", form_str)
-            },
-            Body::Binary(data) => write!(f, "{:?}", data),
-            Body::Empty => write!(f, "")
+            BodyError::InvalidUtf8(msg) => write!(f, "Invalid UTF-8: {}", msg),
+            BodyError::InvalidJson(msg) => write!(f, "Invalid JSON: {}", msg),
+            BodyError::UnsupportedMimeType(mime) => write!(f, "Unsupported MIME type: {}", mime),
+            BodyError::ParseError(msg) => write!(f, "Parse error: {}", msg),
         }
     }
 }
 
+// ============= Body Implementations =============
+impl Body {
+    // Constructor methods
+    pub fn text(content: &str) -> Self {
+        Body::Text(content.to_string())
+    }
+
+    pub fn json(content: JsonValue) -> Self {
+        Body::Json(content)
+    }
+
+    pub fn form(form: FormUrlEncoded) -> Self {
+        Body::FormUrlEncoded(form)
+    }
+
+    pub fn binary(data: BinaryData) -> Self {
+        Body::Binary(data)
+    }
+
+    pub fn empty() -> Self {
+        Body::Empty
+    }
+
+    // Content-Type based creation
+    pub fn from_mime(mime: &str, data: BinaryData) -> Result<Body, BodyError> {
+        match mime.to_lowercase().as_str() {
+            "text/plain" | "text/html" => {
+                let text = std::str::from_utf8(&data)
+                    .map_err(|_| BodyError::InvalidUtf8(mime.to_string()))?;
+                Ok(Body::text(text))
+            }
+            "application/json" => {
+                let json = serde_json::from_slice(&data)
+                    .map_err(|e| BodyError::InvalidJson(e.to_string()))?;
+                Ok(Body::json(json))
+            }
+            "application/x-www-form-urlencoded" => {
+                let form_str = std::str::from_utf8(&data)
+                    .map_err(|_| BodyError::InvalidUtf8("form data".to_string()))?;
+                let mut form = FormUrlEncoded::new();
+                form.parse_str(form_str)?;
+                Ok(Body::form(form))
+            }
+            "application/octet-stream" => Ok(Body::binary(data)),
+            _ => Err(BodyError::UnsupportedMimeType(mime.to_string())),
+        }
+    }
+
+    // Conversion methods
+    // pub fn as_text(&self) -> Option<&str> {
+    //     match self {
+    //         Body::Text(text) => Some(text),
+    //         _ => None,
+    //     }
+    // }
+
+    // pub fn as_json(&self) -> Option<&JsonValue> {
+    //     match self {
+    //         Body::Json(json) => Some(json),
+    //         _ => None,
+    //     }
+    // }
+
+    // pub fn as_form(&self) -> Option<&FormUrlEncoded> {
+    //     match self {
+    //         Body::FormUrlEncoded(form) => Some(form),
+    //         _ => None,
+    //     }
+    // }
+
+    // pub fn as_binary(&self) -> Option<&BinaryData> {
+    //     match self {
+    //         Body::Binary(data) => Some(data),
+    //         _ => None,
+    //     }
+    // }
+}
+
+// ============= FormUrlEncoded Implementations =============
 impl FormUrlEncoded {
-    pub fn new() -> FormUrlEncoded {
+    pub fn new() -> Self {
         FormUrlEncoded {
-            data: HashMap::new()
+            data: HashMap::new(),
         }
     }
 
@@ -50,43 +140,42 @@ impl FormUrlEncoded {
     pub fn get(&self, key: &str) -> Option<&String> {
         self.data.get(key)
     }
-}
 
-
-impl Body {
-    pub fn from_text(text: &str) -> Body {
-        Body::Text(text.to_string())
+    pub fn parse_str(&mut self, input: &str) -> Result<(), BodyError> {
+        for pair in input.split('&').filter(|s| !s.is_empty()) {
+            let mut parts = pair.splitn(2, '=');
+            match (parts.next(), parts.next()) {
+                (Some(key), Some(value)) => self.add(key, value),
+                _ => return Err(BodyError::ParseError("Invalid form data format".to_string())),
+            }
+        }
+        Ok(())
     }
 
-    pub fn from_json(json: serde_json::Value) -> Body {
-        Body::Json(json)
+    pub fn into_inner(self) -> FormData {
+        self.data
     }
 
-    pub fn from_form_urlencoded(form: FormUrlEncoded) -> Body {
-        Body::FormUrlEncoded(form)
-    }
-
-    pub fn from_binary(data: Vec<u8>) -> Body {
-        Body::Binary(data)
-    }
-
-    pub fn from_empty() -> Body {
-        Body::Empty
+    pub fn iter(&self) -> impl Iterator<Item = (&String, &String)> {
+        self.data.iter()
     }
 }
 
-// #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-// pub struct MultipartFormData {
-//     fileds: Vec<MutipartData>    
-// }
-
-
-// #[derive(Debug, Clone, Serialize, Deserialize)]
-// pub struct MutipartData {
-//     name: String,
-//     content_type: Option<Mime>,
-//     data: Vec<u8>
-// }
-
-
-
+// ============= Display Implementations =============
+impl fmt::Display for Body {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Body::Text(text) => write!(f, "{}", text),
+            Body::Json(json) => write!(f, "{}", json),
+            Body::FormUrlEncoded(form) => {
+                let parts: Vec<String> = form
+                    .iter()
+                    .map(|(k, v)| format!("{}={}", k, v))
+                    .collect();
+                write!(f, "{}", parts.join("&"))
+            }
+            Body::Binary(data) => write!(f, "<{} bytes of binary data>", data.len()),
+            Body::Empty => write!(f, ""),
+        }
+    }
+}
