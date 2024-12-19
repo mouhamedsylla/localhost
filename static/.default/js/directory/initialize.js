@@ -4,7 +4,7 @@ import { updateStats } from './stats.js';
 
 export async function initializeDirectory() {
     try {
-        const path = new URLSearchParams(window.location.search).get('path') || '/';
+        const path = window.location.pathname;
         const content = directoryData[path];
         
         if (!content) {
@@ -15,7 +15,6 @@ export async function initializeDirectory() {
         renderDirectoryContent(content);
         updateStats(content);
     } catch (error) {
-        console.error('Failed to initialize directory:', error);
         window.location.href = 'error-template.html?code=404';
     }
 }

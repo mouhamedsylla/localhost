@@ -1,9 +1,9 @@
-use std::default;
-use std::{io, fs, io::Read};
-use std::path::{Path, PathBuf};
 use libc::NFT_CT_DST_IP;
 use mime_guess::from_path;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
+use std::default;
+use std::path::{Path, PathBuf};
+use std::{fs, io, io::Read};
 
 pub type mime = String;
 
@@ -11,23 +11,33 @@ pub type mime = String;
 pub struct ServerStaticFiles {
     pub directory: PathBuf,
     index: String,
-    allow_directory_listing: bool
+    allow_directory_listing: bool,
 }
 
 impl ServerStaticFiles {
-    pub fn new(directory: PathBuf, index: String, allow_directory_listing: bool) -> io::Result<Self> {
+    pub fn new(
+        directory: PathBuf,
+        index: String,
+        allow_directory_listing: bool,
+    ) -> io::Result<Self> {
         if !directory.exists() {
-            return Err(io::Error::new(io::ErrorKind::NotFound, "Directory not found"));
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                "Directory not found",
+            ));
         }
 
         if !index.is_empty() {
             if !directory.join(&index).exists() {
-                return Err(io::Error::new(io::ErrorKind::NotFound, "Index file not found"));
+                return Err(io::Error::new(
+                    io::ErrorKind::NotFound,
+                    "Index file not found",
+                ));
             }
         }
 
         let default_dir = directory.join(".default");
-        if (!default_dir.exists()) {
+        if !default_dir.exists() {
             fs::create_dir(&default_dir).unwrap();
         }
 
@@ -38,21 +48,20 @@ impl ServerStaticFiles {
         Ok(ServerStaticFiles {
             directory,
             index,
-            allow_directory_listing
+            allow_directory_listing,
         })
     }
 
     fn serve_file(&mut self, path: &Path) -> io::Result<(Vec<u8>, Option<mime>)> {
         if !path.is_file() {
-            println!("File not found: {:?}", path);
             if path.is_dir() {
-                return  self.serve_directory(path);
+                return self.serve_directory(path);
             } else {
                 let error_page = self.directory.join(".default/error/error_template.html");
-                return  self.serve_file(&error_page)
+                return self.serve_file(&error_page);
             }
         }
-        
+
         let mut file = fs::File::open(path)?;
         let mut buffer = Vec::new();
         let mime = self.get_mime_type(path.to_str().unwrap());
@@ -62,12 +71,13 @@ impl ServerStaticFiles {
     }
 
     fn serve_directory(&mut self, path: &Path) -> io::Result<(Vec<u8>, Option<mime>)> {
-        println!("Ok est on bon  : {:?}", path);
         self.write_directory_data(path)?;
-        
-        let serve_dir_html = self.directory.join(".default").join("directory_listing.html");
 
-        println!("Serving directory: {:?}", serve_dir_html);
+        let serve_dir_html = self
+            .directory
+            .join(".default")
+            .join("directory_listing.html");
+
         self.serve_file(&serve_dir_html)
     }
 
@@ -76,11 +86,13 @@ impl ServerStaticFiles {
         let full_path = self.directory.join(path);
 
         if full_path.is_dir() {
-            println!("Serving directory 2: {:?}", full_path);
             if self.allow_directory_listing {
                 return self.serve_directory(&full_path);
             } else {
-                return Err(io::Error::new(io::ErrorKind::NotFound, "Directory listing not allowed"));
+                return Err(io::Error::new(
+                    io::ErrorKind::NotFound,
+                    "Directory listing not allowed",
+                ));
             }
         }
 
@@ -93,22 +105,23 @@ impl ServerStaticFiles {
 
     fn generate_directory_data(&self, dir_path: &Path) -> io::Result<Value> {
         let mut items = Vec::new();
-        
+
         for entry in fs::read_dir(dir_path)? {
             let entry = entry?;
             let path = entry.path();
             let metadata = entry.metadata()?;
             let name = entry.file_name().to_string_lossy().to_string();
-            let relative_path = path.strip_prefix(&self.directory)
+            let relative_path = path
+                .strip_prefix(&self.directory)
                 .unwrap_or(&path)
                 .to_string_lossy()
                 .to_string();
-            
+
             let item = if metadata.is_dir() {
                 json!({
                     "name": name,
                     "type": "directory",
-                    "path": format!("{}", relative_path)
+                    "path": format!("/{}", relative_path)
                 })
             } else {
                 json!({
@@ -118,7 +131,7 @@ impl ServerStaticFiles {
                     "path": format!("/{}", relative_path)
                 })
             };
-            
+
             items.push(item);
         }
 
@@ -132,14 +145,14 @@ impl ServerStaticFiles {
 
     fn write_directory_data(&self, path: &Path) -> io::Result<()> {
         let mut structure = std::collections::HashMap::new();
-        
+
         // Generate data for current directory
         let current_dir_data = self.generate_directory_data(path)?;
         structure.insert(
             current_dir_data["path"].as_str().unwrap_or("/").to_string(),
-            current_dir_data
+            current_dir_data,
         );
-        
+
         // Generate data for subdirectories
         for entry in fs::read_dir(path)? {
             let entry = entry?;
@@ -147,7 +160,7 @@ impl ServerStaticFiles {
                 let subdir_data = self.generate_directory_data(&entry.path())?;
                 structure.insert(
                     subdir_data["path"].as_str().unwrap_or("/").to_string(),
-                    subdir_data
+                    subdir_data,
                 );
             }
         }
