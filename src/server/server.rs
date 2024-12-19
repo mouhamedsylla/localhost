@@ -143,7 +143,7 @@ impl Server {
         Ok(())
     }
 
-    fn handle_client_connection(&mut self, client_fd: RawFd, host: Host) -> std::io::Result<()> {
+    fn handle_request(&mut self, client_fd: RawFd, host: Host) -> std::io::Result<()> {
         if let Some(connection) = self.connections.get_mut(&client_fd) {
             let mut buffer = [0; 1024];
             match connection.stream.read(&mut buffer) {
@@ -158,41 +158,43 @@ impl Server {
                 Ok(bytes_read) => {
                     let request_str = String::from_utf8_lossy(&buffer[..bytes_read]);
                     if let Some(request) = crate::http::request::parse_request(&request_str) {
-                        let static_files = host.static_files.as_ref().unwrap();
-                        if request.method == HttpMethod::GET {
+                        if let Some(static_files) = host.static_files.as_ref() {
+                            if request.method == HttpMethod::GET {
 
-                            match static_files.handle_stactic_file_serve(&request.uri) {
-                                Ok(result) => {
-                                    let (content, mime) = result;
-                                    let mime_str = match mime {
-                                        Some(mime) => mime.to_string(),
-                                        None => "text/plain".to_string(),
-                                    };
-
-                                    let content_type = Header::from_mime(&mime_str);
-
-                                    let body = Body::from_mime(&mime_str, content);
-                                    let response_builder = ResponseBuilder::new();
-                                    
-                                    
-                                    match body {
-                                        Ok(body) => {
-                                            let response = response_builder.body(body).header(content_type);
-                                            connection.stream.write_all(response.build().to_string().as_bytes())?;
-                                        },
-                                        Err(e) => {
-                                            let response = response_builder.body(Body::text(&e.to_string())).header(Header::from_mime("text/plain"));
-                                            connection.stream.write_all(response.build().to_string().as_bytes())?;
+                                match static_files.handle_stactic_file_serve(&request.uri) {
+                                    Ok(result) => {
+                                        let (content, mime) = result;
+                                        let mime_str = match mime {
+                                            Some(mime) => mime.to_string(),
+                                            None => "text/plain".to_string(),
+                                        };
+    
+                                        let content_type = Header::from_mime(&mime_str);
+    
+                                        let body = Body::from_mime(&mime_str, content);
+                                        let response_builder = ResponseBuilder::new();
+                                        
+                                        
+                                        match body {
+                                            Ok(body) => {
+                                                let response = response_builder.body(body).header(content_type);
+                                                connection.stream.write_all(response.build().to_string().as_bytes())?;
+                                            },
+                                            Err(e) => {
+                                                let response = response_builder.body(Body::text(&e.to_string())).header(Header::from_mime("text/plain"));
+                                                connection.stream.write_all(response.build().to_string().as_bytes())?;
+                                            }
                                         }
+    
+                                        connection.stream.flush()?;
+                                    },
+                                    Err(e) => {
+                                        eprintln!("Error handling static file: {}", e);
                                     }
-
-                                    connection.stream.flush()?;
-                                },
-                                Err(e) => {
-                                    eprintln!("Error handling static file: {}", e);
                                 }
                             }
                         }
+
                     }
 
                     // Fermer la connexion après l'envoi
@@ -260,7 +262,7 @@ impl Server {
                     // let host = self.find_host_by_fd(fd as RawFd).unwrap();
                     let connection = self.connections.get(&(fd as RawFd)).unwrap();
                     let host = self.get_host_by_name(&connection.host_name).unwrap();
-                    if let Err(e) = self.handle_client_connection(fd as RawFd, host.clone()) {
+                    if let Err(e) = self.handle_request(fd as RawFd, host.clone()) {
                         eprintln!("Error handling client connection: {}", e);
                         unsafe {
                             epoll_ctl(self.epool_fd, EPOLL_CTL_DEL, fd, std::ptr::null_mut());

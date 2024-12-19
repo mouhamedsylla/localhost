@@ -52,19 +52,48 @@ impl ServerStaticFiles {
         Ok((buffer, Some(mime)))
     }
 
+    fn serve_directory(&self, path: &Path) -> io::Result<(Vec<u8>, Option<mime>)> {
+        let mut html = String::from("<!DOCTYPE html><html><body><h1>Index de répertoire</h1><ul>");
+
+        for entry in fs::read_dir(path)? {
+            let entry = entry?;
+            let file_name = entry.file_name();
+            let file_path = entry.path();
+            
+            let entry_type = if file_path.is_dir() { "📁 " } else { "📄 " };
+            
+            html.push_str(&format!(
+                "<li>{} <a href=\"{}\">{}</a></li>", 
+                entry_type, 
+                file_name.to_string_lossy(), 
+                file_name.to_string_lossy()
+            ));
+        }
+        
+        html.push_str("</ul></body></html>");
+        Ok((html.into_bytes(), Some("text/html".to_string())))
+    }
+
     pub fn handle_stactic_file_serve(&self, path: &str) -> io::Result<(Vec<u8>, Option<mime>)> {
+        println!("Serving static file: {}", path);
         let path = path.trim_start_matches('/');
         let full_path = self.directory.join(path);
 
+        println!("Full path: {:?}", full_path);
+
         if full_path.is_dir() {
-            let message = "Directory listing is not allowed";
-            return Ok((message.as_bytes().to_vec(), None));
+            if self.allow_directory_listing {
+                return self.serve_directory(&full_path);
+            } else {
+                return Err(io::Error::new(io::ErrorKind::NotFound, "Directory listing not allowed"));
+            }
         }
 
         self.serve_file(&full_path)
     }
 
     fn get_mime_type(&self, path: &str) -> mime {
-    from_path(path).first_or_octet_stream().to_string()
+        from_path(path).first_or_octet_stream().to_string()
     }
+
 }

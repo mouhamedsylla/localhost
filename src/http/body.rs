@@ -14,8 +14,6 @@ pub enum Body {
     Text(String),
     Json(JsonValue),
     FormUrlEncoded(FormUrlEncoded),
-    // TODO: Implement MultipartFormData
-    // MultipartFormData(MultipartFormData),
     Binary(BinaryData),
     Empty,
 }
@@ -73,7 +71,7 @@ impl Body {
     // Content-Type based creation
     pub fn from_mime(mime: &str, data: BinaryData) -> Result<Body, BodyError> {
         match mime.to_lowercase().as_str() {
-            "text/plain" | "text/html" => {
+            "text/plain" | "text/html" | "text/css" | "" => {
                 let text = std::str::from_utf8(&data)
                     .map_err(|_| BodyError::InvalidUtf8(mime.to_string()))?;
                 Ok(Body::text(text))
@@ -152,9 +150,6 @@ impl FormUrlEncoded {
         Ok(())
     }
 
-    pub fn into_inner(self) -> FormData {
-        self.data
-    }
 
     pub fn iter(&self) -> impl Iterator<Item = (&String, &String)> {
         self.data.iter()

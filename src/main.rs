@@ -10,7 +10,13 @@ fn main() -> std::io::Result<()> {
     let server1_dir = ServerStaticFiles::new(
         std::path::PathBuf::from("static"),
         "index.html".to_string(),
-        false
+        true
+    )?;
+
+    let server2_dir = ServerStaticFiles::new(
+        std::path::PathBuf::from("static"),
+        "index.html".to_string(),
+        true
     )?;
     
     let host1 = server::server::Host::new("8080", "Serveur HTTP 1", Some(server1_dir));
