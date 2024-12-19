@@ -71,7 +71,7 @@ impl Body {
     // Content-Type based creation
     pub fn from_mime(mime: &str, data: BinaryData) -> Result<Body, BodyError> {
         match mime.to_lowercase().as_str() {
-            "text/plain" | "text/html" | "text/css" | "" => {
+            "text/plain" | "text/html" | "text/css" | "text/javascript" => {
                 let text = std::str::from_utf8(&data)
                     .map_err(|_| BodyError::InvalidUtf8(mime.to_string()))?;
                 Ok(Body::text(text))

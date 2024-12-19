@@ -27,7 +27,6 @@ impl ResponseBuilder {
         }
     }
 
-
     pub fn status_code(mut self, status_code: HttpStatusCode) -> ResponseBuilder {
         self.status_code = status_code;
         self

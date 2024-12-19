@@ -133,8 +133,6 @@ impl Server {
                     }
                 }
 
-                println!("New connection in server: {}", host.server_name);
-
                 let connection = Connection::new(stream, host.server_name.clone());
                 self.connections.insert(client_fd, connection);
             },
@@ -158,8 +156,9 @@ impl Server {
                 Ok(bytes_read) => {
                     let request_str = String::from_utf8_lossy(&buffer[..bytes_read]);
                     if let Some(request) = crate::http::request::parse_request(&request_str) {
-                        if let Some(static_files) = host.static_files.as_ref() {
+                        if let Some(mut static_files) = host.static_files {
                             if request.method == HttpMethod::GET {
+                                
 
                                 match static_files.handle_stactic_file_serve(&request.uri) {
                                     Ok(result) => {
