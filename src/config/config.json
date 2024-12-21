@@ -12,7 +12,11 @@
       {
         "port": "8081",
         "name": "Serveur HTTP 2",
-        "static_files": null
+        "static_files": {
+          "directory": "static",
+          "default_page": "index.html",
+          "list_directory": true
+        }
       }
     ]
 }

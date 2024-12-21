@@ -8,6 +8,7 @@ pub type JsonValue = serde_json::Value;
 pub type BinaryData = Vec<u8>;
 pub type FormData = HashMap<String, String>;
 
+
 // ============= Main Structures =============
 #[derive(Debug, Clone)]
 pub enum Body {
@@ -71,7 +72,7 @@ impl Body {
     // Content-Type based creation
     pub fn from_mime(mime: &str, data: BinaryData) -> Result<Body, BodyError> {
         match mime.to_lowercase().as_str() {
-            "text/plain" | "text/html" | "text/css" | "text/javascript" => {
+            "text/plain" | "text/html" | "text/css" | "text/javascript" | "video/mp4" => {
                 let text = std::str::from_utf8(&data)
                     .map_err(|_| BodyError::InvalidUtf8(mime.to_string()))?;
                 Ok(Body::text(text))

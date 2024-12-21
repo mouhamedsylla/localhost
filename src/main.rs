@@ -3,12 +3,14 @@ mod server;
 mod config;
 
 use server::server::Server;
+use server::server::ServerError;
+use crate::server::host::Host;
 use crate::server::static_files::ServerStaticFiles;
 use config::config::load_config;
 use std::path::PathBuf;
 
-fn main() -> std::io::Result<()> {
-    let mut servers = Server::new();
+fn main() -> Result<(), ServerError> {
+    let mut servers = Server::new().unwrap();
     
     let config = load_config()?;
     
@@ -18,17 +20,17 @@ fn main() -> std::io::Result<()> {
                 PathBuf::from(sf_config.directory),
                 sf_config.default_page,
                 sf_config.list_directory
-            )?),
+            ).unwrap()),
             None => None,
         };
 
-        let host = server::server::Host::new(
+        let host = Host::new(
             &host_config.port,
             &host_config.name,
             static_files
-        );
+        )?;
 
-        servers.add_host(host);
+        let _ = servers.add_host(host);
     }
 
     servers.run()

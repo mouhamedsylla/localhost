@@ -1,12 +1,15 @@
-use libc::NFT_CT_DST_IP;
+use std::{
+    path::{Path, PathBuf},
+    fs, io,
+    io::Read
+};
 use mime_guess::from_path;
 use serde_json::{json, Value};
-use std::default;
-use std::path::{Path, PathBuf};
-use std::{fs, io, io::Read};
 
+/// Type alias for MIME type strings
 pub type mime = String;
 
+/// Configuration for serving static files
 #[derive(Debug, Clone)]
 pub struct ServerStaticFiles {
     pub directory: PathBuf,
@@ -14,12 +17,14 @@ pub struct ServerStaticFiles {
     allow_directory_listing: bool,
 }
 
+/// Core implementation
 impl ServerStaticFiles {
     pub fn new(
         directory: PathBuf,
         index: String,
         allow_directory_listing: bool,
     ) -> io::Result<Self> {
+        // Validate directory exists
         if !directory.exists() {
             return Err(io::Error::new(
                 io::ErrorKind::NotFound,
@@ -27,6 +32,7 @@ impl ServerStaticFiles {
             ));
         }
 
+        // Validate index file if specified
         if !index.is_empty() {
             if !directory.join(&index).exists() {
                 return Err(io::Error::new(
@@ -36,13 +42,13 @@ impl ServerStaticFiles {
             }
         }
 
+        // Create default directory if missing
         let default_dir = directory.join(".default");
         if !default_dir.exists() {
             fs::create_dir(&default_dir).unwrap();
         }
 
         let src = std::path::PathBuf::from("src/.default");
-
         copy_default_dir(&src, &default_dir);
 
         Ok(ServerStaticFiles {
@@ -52,36 +58,7 @@ impl ServerStaticFiles {
         })
     }
 
-    fn serve_file(&mut self, path: &Path) -> io::Result<(Vec<u8>, Option<mime>)> {
-        if !path.is_file() {
-            if path.is_dir() {
-                return self.serve_directory(path);
-            } else {
-                let error_page = self.directory.join(".default/error/error_template.html");
-                return self.serve_file(&error_page);
-            }
-        }
-
-        let mut file = fs::File::open(path)?;
-        let mut buffer = Vec::new();
-        let mime = self.get_mime_type(path.to_str().unwrap());
-        file.read_to_end(&mut buffer)?;
-
-        Ok((buffer, Some(mime)))
-    }
-
-    fn serve_directory(&mut self, path: &Path) -> io::Result<(Vec<u8>, Option<mime>)> {
-        self.write_directory_data(path)?;
-
-        let serve_dir_html = self
-            .directory
-            .join(".default")
-            .join("directory_listing.html");
-
-        self.serve_file(&serve_dir_html)
-    }
-
-    pub fn handle_stactic_file_serve(&mut self, path: &str) -> io::Result<(Vec<u8>, Option<mime>)> {
+    pub fn serve_static(&mut self, path: &str) -> io::Result<(Vec<u8>, Option<mime>)> {
         let path = path.trim_start_matches('/');
         let full_path = self.directory.join(path);
 
@@ -98,41 +75,66 @@ impl ServerStaticFiles {
 
         self.serve_file(&full_path)
     }
+}
 
-    fn get_mime_type(&self, path: &str) -> mime {
-        from_path(path).first_or_octet_stream().to_string()
+/// File serving implementation
+impl ServerStaticFiles {
+    /// Serves a static file
+    fn serve_file(&self, path: &Path) -> io::Result<(Vec<u8>, Option<mime>)> {
+        if !path.is_file() {
+            if path.is_dir() {
+                return self.serve_directory(path);
+            } else {
+                let error_page = self.directory.join(".default/error/error_template.html");
+                return self.serve_file(&error_page);
+            }
+        }
+
+        let mut file = fs::File::open(path)?;
+        let mut buffer = Vec::new();
+        file.read_to_end(&mut buffer)?;
+        
+        let mime = self.get_mime_type(path);
+        Ok((buffer, Some(mime)))
     }
 
+    /// Gets MIME type for a file path
+    fn get_mime_type(&self, path: &Path) -> mime {
+        from_path(path).first_or_octet_stream().to_string()
+    }
+}
+
+/// Directory handling implementation
+impl ServerStaticFiles {
+    /// Serves a directory listing
+    fn serve_directory(&self, path: &Path) -> io::Result<(Vec<u8>, Option<mime>)> {
+        self.write_directory_data(path)?;
+
+        let serve_dir_html = self
+            .directory
+            .join(".default")
+            .join("directory_listing.html");
+
+        self.serve_file(&serve_dir_html)
+    }
+
+    /// Generates directory listing data
     fn generate_directory_data(&self, dir_path: &Path) -> io::Result<Value> {
         let mut items = Vec::new();
-
+        
         for entry in fs::read_dir(dir_path)? {
             let entry = entry?;
             let path = entry.path();
             let metadata = entry.metadata()?;
-            let name = entry.file_name().to_string_lossy().to_string();
-            let relative_path = path
-                .strip_prefix(&self.directory)
-                .unwrap_or(&path)
-                .to_string_lossy()
-                .to_string();
-
-            let item = if metadata.is_dir() {
-                json!({
-                    "name": name,
-                    "type": "directory",
-                    "path": format!("/{}", relative_path)
-                })
-            } else {
-                json!({
-                    "name": name,
-                    "type": "file",
-                    "size": metadata.len(),
-                    "path": format!("/{}", relative_path)
-                })
-            };
-
-            items.push(item);
+            
+            items.push(json!({
+                "name": entry.file_name().to_string_lossy(),
+                "type": if metadata.is_dir() { "directory" } else { "file" },
+                "size": metadata.len(),
+                "path": format!("/{}", path.strip_prefix(&self.directory)
+                    .unwrap_or(&path)
+                    .to_string_lossy())
+            }));
         }
 
         Ok(json!({
@@ -143,6 +145,7 @@ impl ServerStaticFiles {
         }))
     }
 
+    /// Writes directory listing data to a file
     fn write_directory_data(&self, path: &Path) -> io::Result<()> {
         let mut structure = std::collections::HashMap::new();
 
@@ -171,7 +174,6 @@ impl ServerStaticFiles {
             serde_json::to_string_pretty(&structure)?
         );
 
-        // remove .default/js/directory/data.js if it exists
         let data_js_path = self.directory.join(".default/js/directory/data.js");
         if data_js_path.exists() {
             fs::remove_file(data_js_path)?;
@@ -204,3 +206,4 @@ pub fn copy_default_dir(src: &Path, dst: &Path) {
         }
     }
 }
+

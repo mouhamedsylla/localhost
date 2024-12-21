@@ -1,276 +1,243 @@
-use std::collections::HashMap;
-use std::net::{TcpListener, TcpStream};
-use std::os::unix::io::{AsRawFd, RawFd};
-use std::io::{Read, Write, ErrorKind};
+use std::os::fd::AsRawFd;
+use std::{collections::HashMap, os::unix::io::RawFd};
+use std::io::Write;
 use crate::http::body::Body;
 use crate::http::response::ResponseBuilder;
 use crate::server::static_files::ServerStaticFiles;
 use crate::http::request::HttpMethod;
 use crate::http::header::Header;
+use std::path::Path;
+use crate::http::request::Request;
+use crate::server::connection::Connection;
+use crate::server::host::Host;
 
 use libc::{
     epoll_create1, epoll_ctl, epoll_event, epoll_wait, 
-    EPOLLET, EPOLLIN, EPOLLHUP, EPOLLERR, EPOLLOUT,
+    EPOLLET, EPOLLIN, EPOLLHUP, EPOLLERR,
     EPOLL_CTL_ADD, EPOLL_CTL_DEL,
 };
 
+
+const EPOLL_EVENTS: u32 = (EPOLLIN | EPOLLET) as u32;
 const MAX_EVENTS: usize = 64;
 
-pub struct Connection {
-    pub stream: TcpStream,
-    pub client_fd: RawFd,
-    pub host_name: String,
+#[derive(Debug)]
+pub enum ServerError {
+    IoError(std::io::Error),
+    EpollError(&'static str),
+    ConnectionError(String),
 }
 
-impl Clone for Host {
-    fn clone(&self) -> Host {
-        Host {
-            port: self.port.clone(),
-            server_name: self.server_name.clone(),
-            listener: self.listener.try_clone().unwrap(),
-            fd: self.fd,
-            static_files: self.static_files.clone(),
-        }
+impl From<std::io::Error> for ServerError {
+    fn from(error: std::io::Error) -> Self {
+        ServerError::IoError(error)
     }
 }
 
-impl Connection {
-    pub fn new(stream: TcpStream, host_name: String) -> Connection {
-        let client_fd = stream.as_raw_fd();
-        Connection {
-            stream,
-            client_fd,
-            host_name,
-        }
-    }
-}
-
-pub struct Host {
-    pub port: String,
-    pub server_name: String,
-    pub listener: TcpListener,
-    pub fd: RawFd,
-    pub static_files: Option<ServerStaticFiles>,
-}
-
-impl Host {
-    pub fn new(port: &str, server_name: &str, server_directory: Option<ServerStaticFiles>) -> Host {
-        let listener = TcpListener::bind(format!("127.0.0.1:{}", port)).unwrap();
-        listener.set_nonblocking(true).unwrap();
-        
-        let fd = listener.as_raw_fd();
-
-        Host {
-            port: port.to_string(),
-            server_name: server_name.to_string(),
-            listener,
-            fd,
-            static_files: server_directory,
-        }
-    }
-}
-
+/// Server structure managing multiple hosts and connections
+#[derive(Debug)]
 pub struct Server {
-    pub hosts: Vec<Host>,
-    pub connections: HashMap<RawFd, Connection>,
-    pub epool_fd: RawFd,
+    hosts: Vec<Host>,
+    connections: HashMap<RawFd, Connection>,
+    epoll_fd: RawFd,
 }
 
+/// Implementation of server creation and initialization
 impl Server {
-    pub fn new() -> Server {
-        let epool_fd = unsafe { epoll_create1(0) };
-        
-        if epool_fd < 0 {
-            panic!("Failed to create epoll file descriptor");
-        }
+    pub fn new() -> Result<Self, ServerError> {
+        let epoll_fd = Self::create_epoll()?;
 
-        Server {
+        Ok(Server {
             hosts: Vec::new(),
             connections: HashMap::new(),
-            epool_fd,
+            epoll_fd
+        })
+    }
+
+    fn create_epoll() -> Result<RawFd, ServerError> {
+        let epoll_fd = unsafe { epoll_create1(0) };
+
+        if epoll_fd < 0 {
+            return Err(ServerError::EpollError("Failed to create epoll file descriptor"));
         }
+
+        Ok(epoll_fd)
+    }
+}
+
+/// Host management implementation
+impl Server {
+    pub fn add_host(&mut self, host: Host) -> Result<(), ServerError> {
+        self.register_host_with_epoll(&host)?;
+        self.hosts.push(host);
+        Ok(())
     }
 
-    fn get_host_by_name(&self, name: &str) -> Option<&Host> {
-        self.hosts.iter().find(|&host| host.server_name == name)
-    }
-
-    pub fn add_host(&mut self, host: Host) {
-        // Enregistrer le listener de l'hôte dans l'epoll
-        let mut event = libc::epoll_event {
-            events: (EPOLLIN | EPOLLET) as u32,
-            u64: host.fd as u64,
+    fn register_host_with_epoll(&self, host: &Host) -> Result<(), ServerError> {
+        let mut event = epoll_event {
+            events: EPOLL_EVENTS,
+            u64: host.fd as u64
         };
 
         unsafe {
-            if epoll_ctl(self.epool_fd, EPOLL_CTL_ADD, host.fd, &mut event) < 0 {
-                panic!("Failed to add listener to epoll");
+            if epoll_ctl(self.epoll_fd, EPOLL_CTL_ADD, host.fd, &mut event) < 0 {
+                return Err(ServerError::EpollError("Failed to add listener to epoll"));
             }
         }
 
-        self.hosts.push(host);
-    }
-
-    fn find_host_by_fd(&self, fd: RawFd) -> Option<&Host> {
-        self.hosts.iter().find(|&host| host.fd == fd)
-    }
-
-    fn handle_new_connection(&mut self, fd: RawFd) -> std::io::Result<()> {
-        let host = self.find_host_by_fd(fd).unwrap();
-        match host.listener.accept() {
-            Ok((mut stream, _)) => {
-                stream.set_nonblocking(true)?;
-                
-                let client_fd = stream.as_raw_fd();
-
-                let mut event = libc::epoll_event {
-                    events: (EPOLLIN | EPOLLET) as u32,
-                    u64: client_fd as u64,
-                };
-
-                unsafe {
-                    if epoll_ctl(self.epool_fd, EPOLL_CTL_ADD, client_fd, &mut event) < 0 {
-                        eprintln!("Failed to add client to epoll");
-                    }
-                }
-
-                let connection = Connection::new(stream, host.server_name.clone());
-                self.connections.insert(client_fd, connection);
-            },
-            Err(e) => return Err(e),
-        }
         Ok(())
     }
 
-    fn handle_request(&mut self, client_fd: RawFd, host: Host) -> std::io::Result<()> {
-        if let Some(connection) = self.connections.get_mut(&client_fd) {
-            let mut buffer = [0; 1024];
-            match connection.stream.read(&mut buffer) {
-                Ok(0) => {
-                    // Connection closed by client
-                    unsafe {
-                        epoll_ctl(self.epool_fd, EPOLL_CTL_DEL, client_fd, std::ptr::null_mut());
-                    }
-                    self.connections.remove(&client_fd);
-                    return Ok(());
-                }
-                Ok(bytes_read) => {
-                    let request_str = String::from_utf8_lossy(&buffer[..bytes_read]);
-                    if let Some(request) = crate::http::request::parse_request(&request_str) {
+    fn handle_new_connection(&mut self, fd: RawFd) -> Result<(), ServerError> {
+        let host = self.find_host_by_fd(fd)
+            .ok_or_else(|| ServerError::ConnectionError("Host not found".to_string())).unwrap();
+
+        let stream = host.accept_connection().unwrap();
+        let client_fd = stream.as_raw_fd();
+
+        let mut event = epoll_event {
+            events: (EPOLLIN | EPOLLET) as u32,
+            u64: client_fd as u64
+        };
+
+        unsafe {
+            if epoll_ctl(self.epoll_fd, EPOLL_CTL_ADD, client_fd, &mut event) < 0 {
+                return Err(ServerError::EpollError("Failed to add client to epoll"));
+            }
+        }
+
+        let connection = Connection::new(stream, host.server_name.clone());
+        self.connections.insert(client_fd, connection);
+        Ok(())
+    }
+
+
+    fn handle_request(&mut self, client_fd: RawFd, host: Host) -> Result<(), ServerError> {
+        let connection = self.connections.get_mut(&client_fd).unwrap();
+
+        match connection.read_request()? {
+            Some(buffer) if !buffer.is_empty() => {
+                let request_str = String::from_utf8_lossy(&buffer);
+                if let Some(request) = crate::http::request::parse_request(&request_str) {
+                    if request.method == HttpMethod::GET {
                         if let Some(mut static_files) = host.static_files {
-                            if request.method == HttpMethod::GET {
-                                
-
-                                match static_files.handle_stactic_file_serve(&request.uri) {
-                                    Ok(result) => {
-                                        let (content, mime) = result;
-                                        let mime_str = match mime {
-                                            Some(mime) => mime.to_string(),
-                                            None => "text/plain".to_string(),
-                                        };
-    
-                                        let content_type = Header::from_mime(&mime_str);
-    
-                                        let body = Body::from_mime(&mime_str, content);
-                                        let response_builder = ResponseBuilder::new();
-                                        
-                                        
-                                        match body {
-                                            Ok(body) => {
-                                                let response = response_builder.body(body).header(content_type);
-                                                connection.stream.write_all(response.build().to_string().as_bytes())?;
-                                            },
-                                            Err(e) => {
-                                                let response = response_builder.body(Body::text(&e.to_string())).header(Header::from_mime("text/plain"));
-                                                connection.stream.write_all(response.build().to_string().as_bytes())?;
-                                            }
-                                        }
-    
-                                        connection.stream.flush()?;
-                                    },
-                                    Err(e) => {
-                                        eprintln!("Error handling static file: {}", e);
-                                    }
-                                }
-                            }
+                            handle_static_file_request(&mut static_files, request, connection)?;
                         }
-
                     }
-
-                    // Fermer la connexion après l'envoi
-                    unsafe {
-                        epoll_ctl(self.epool_fd, EPOLL_CTL_DEL, client_fd, std::ptr::null_mut());
-                    }
-                    self.connections.remove(&client_fd);                    
                 }
-                Err(e) if e.kind() == ErrorKind::WouldBlock => {}
-                Err(e) => return Err(e),
+            },
+            Some(_) => (),
+            None => self.close_connection(client_fd)?
+        }
+
+        unsafe {
+            epoll_ctl(self.epoll_fd, EPOLL_CTL_DEL, client_fd, std::ptr::null_mut());
+        }
+        self.connections.remove(&client_fd);
+        Ok(())
+    }
+
+    fn close_connection(&mut self, client_fd: RawFd) -> Result<(), ServerError> {
+        unsafe {
+            if epoll_ctl(self.epoll_fd, EPOLL_CTL_DEL, client_fd, std::ptr::null_mut()) < 0 {
+                return Err(ServerError::EpollError("Failed to remove client from epoll"));
             }
+        }
+        self.connections.remove(&client_fd);
+        Ok(())
+    }
+
+    fn handle_event(&mut self, event: epoll_event) -> Result<(), ServerError> {
+        let fd = event.u64 as RawFd;
+
+        if (event.events & (EPOLLHUP | EPOLLERR) as u32) != 0 {
+            return self.close_connection(fd);
+        }
+
+        if let Some(_) = self.find_host_by_fd(fd) {
+            return self.handle_new_connection(fd);
+        }
+
+        if let Some(connection) = self.connections.get(&fd) {
+            let host = self.get_host_by_name(&connection.host_name).unwrap();
+            return self.handle_request(fd, host.clone());
         }
         Ok(())
     }
 
-    pub fn run(&mut self) -> std::io::Result<()> {
-        println!("Démarrage du serveur avec {} hôtes", self.hosts.len());
+    pub fn run(&mut self) -> Result<(), ServerError> {
+        println!("Starting server with {} hosts", self.hosts.len());
 
-        let mut events = vec![
-            epoll_event {
-                events: 0,
-                u64: 0,
-            }; 
-            MAX_EVENTS
-        ];
+        let mut events = vec![epoll_event { events: 0, u64: 0 }; MAX_EVENTS];
 
         loop {
             let num_events = unsafe {
                 epoll_wait(
-                    self.epool_fd, 
-                    events.as_mut_ptr(), 
-                    MAX_EVENTS as i32, 
+                    self.epoll_fd,
+                    events.as_mut_ptr(),
+                    MAX_EVENTS as i32,
                     -1
                 )
             };
 
             if num_events < 0 {
-                panic!("Failed to wait for events");
+                return Err(ServerError::EpollError("Failed to wait for events"));
             }
 
-            for i in 0..num_events as usize {
-                let event = events[i];
-                let fd = event.u64 as i32;
-
-                if (event.events & (EPOLLHUP | EPOLLERR) as u32) != 0 {
-                    // Handle error or hung up events
-                    unsafe {
-                        epoll_ctl(self.epool_fd, EPOLL_CTL_DEL, fd, std::ptr::null_mut());
-                    }
-                    self.connections.remove(&(fd as RawFd));
-                    continue;
-                }
-
-                if let Some(_host) = self.find_host_by_fd(fd as RawFd) {
-                    // New connection on listener socket
-                    if let Err(e) = self.handle_new_connection(fd as RawFd) {
-                        eprintln!("Error accepting connection: {}", e);
-                        unsafe {
-                            epoll_ctl(self.epool_fd, EPOLL_CTL_DEL, fd, std::ptr::null_mut());
-                        }
-                        self.connections.remove(&(fd as RawFd));
-                    }
-                } else {
-                    // Existing connection
-                    // let host = self.find_host_by_fd(fd as RawFd).unwrap();
-                    let connection = self.connections.get(&(fd as RawFd)).unwrap();
-                    let host = self.get_host_by_name(&connection.host_name).unwrap();
-                    if let Err(e) = self.handle_request(fd as RawFd, host.clone()) {
-                        eprintln!("Error handling client connection: {}", e);
-                        unsafe {
-                            epoll_ctl(self.epool_fd, EPOLL_CTL_DEL, fd, std::ptr::null_mut());
-                        }
-                        self.connections.remove(&(fd as RawFd));
-                    }
+            for event in &events[..num_events as usize] {
+                if let Err(e) = self.handle_event(*event) {
+                    eprintln!("Error handling event: {:?}", e);
                 }
             }
+        }
+    }
+}
+
+/// Host lookup implementation
+impl Server {
+    pub fn get_host_by_name(&self, name: &str) -> Option<&Host> {
+        self.hosts.iter().find(|&host| host.server_name == name)
+    }
+
+    fn find_host_by_fd(&self, fd: RawFd) -> Option<&Host> {
+        self.hosts.iter().find(|&host| host.fd == fd)
+    }
+}
+
+fn handle_static_file_request(static_files: &mut ServerStaticFiles, request: Request, connection: &mut Connection)
+-> Result<(), ServerError> 
+{
+   match static_files.serve_static(&request.uri) {
+       Ok((content, mime)) => {
+           let mime_str = mime.map_or_else(|| "text/plain".to_string(), |m| m.to_string());
+           let content_type = Header::from_mime(&mime_str);
+
+           let body = Body::from_mime(&mime_str, content);
+           let response_builder = ResponseBuilder::new;
+       
+           match body {
+               Ok(body) => {
+                   let response = response_builder().body(body).header(content_type);
+                   connection.stream.write_all(response.build().to_string().as_bytes())?;
+               },
+               Err(e) => {
+                   let response = response_builder().body(Body::text(&e.to_string())).header(Header::from_mime("text/plain"));
+                   connection.stream.write_all(response.build().to_string().as_bytes())?;
+               }
+           }
+
+           connection.stream.flush()?;
+           Ok(())
+       },
+       Err(e) => Err(ServerError::ConnectionError(format!("Static file error: {}", e))),
+   }
+}
+
+impl Drop for Server {
+    fn drop(&mut self) {
+        // Clean up epoll file descriptor
+        unsafe {
+            libc::close(self.epoll_fd);
         }
     }
 }
