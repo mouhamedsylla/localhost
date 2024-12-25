@@ -1,22 +1,25 @@
 use serde::Deserialize;
 use std::fs;
 
-#[derive(Deserialize)]
-pub struct StaticFiles {
-    pub directory: String,
+
+#[derive(Deserialize, Debug)]
+pub struct Route {
+    pub path: String,
+    pub methods: Vec<String>,
+    pub root: String,
     pub default_page: String,
-    pub list_directory: bool,
+    pub directory_listing: bool,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct Host {
-    pub ip: String,
-    pub port: String,
-    pub name: String,
-    pub static_files: Option<StaticFiles>,
+    pub server_address: String,
+    pub ports: Vec<String>,
+    pub server_name: String,
+    pub routes: Vec<Route>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct Server {
     pub servers: Vec<Host>,
 }

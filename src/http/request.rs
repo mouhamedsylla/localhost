@@ -18,6 +18,24 @@ pub enum HttpMethod {
     TRACE    
 }
 
+impl HttpMethod {
+    pub fn from_str(method: &str) -> HttpMethod {
+        match method {
+            "GET" => HttpMethod::GET,
+            "POST" => HttpMethod::POST,
+            "DELETE" => HttpMethod::DELETE,
+            "PUT" => HttpMethod::PUT,
+            "PATCH" => HttpMethod::PATCH,
+            "OPTIONS" => HttpMethod::OPTIONS,
+            "HEAD" => HttpMethod::HEAD,
+            "CONNECT" => HttpMethod::CONNECT,
+            "TRACE" => HttpMethod::TRACE,
+            _ => HttpMethod::GET
+        }
+    }
+    
+}
+
 
 #[derive(Debug, Clone)]
 pub struct Request {
@@ -103,18 +121,7 @@ pub fn parse_request(request: &str) -> Option<Request> {
     let body = None;
 
     let request = Request::new(
-        match method {
-            "GET" => HttpMethod::GET,
-            "POST" => HttpMethod::POST,
-            "DELETE" => HttpMethod::DELETE,
-            "PUT" => HttpMethod::PUT,
-            "PATCH" => HttpMethod::PATCH,
-            "OPTIONS" => HttpMethod::OPTIONS,
-            "HEAD" => HttpMethod::HEAD,
-            "CONNECT" => HttpMethod::CONNECT,
-            "TRACE" => HttpMethod::TRACE,
-            _ => HttpMethod::GET
-        },
+        HttpMethod::from_str(method),
         uri.to_string(),
         version.to_string(),
         headers,

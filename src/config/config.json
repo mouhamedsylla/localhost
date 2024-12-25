@@ -2,53 +2,18 @@
   "servers": [
     {
       "server_address": "127.0.0.1",
-      "ports": [8080, 8081],
+      "server_name": "localhost",
+      "ports": ["8080", "8081"],
       "default": true,
       "error_pages_path": "/path/to/error/pages",
       "client_body_size_limit": "10M",
       "routes": [
         {
-          "path": "/test",
-          "methods": ["GET", "POST"],
-          "root": "/usr/Desktop",
-          "default_file": "index.html",
-          "directory_listing": false
-        },
-        {
-          "path": "/api",
-          "methods": ["GET", "POST", "PUT", "DELETE"],
-          "redirect": "/api/v1"
-        },
-        {
-          "path": "/cgi-bin",
-          "methods": ["POST"],
-          "root": "/usr/cgi-bin",
-          "cgi": {
-            ".php": "/usr/bin/php-cgi",
-            ".py": "/usr/bin/python3"
-          }
-        },
-        {
-          "path": "/public",
-          "methods": ["GET"],
-          "root": "/var/www/public",
-          "directory_listing": true
-        }
-      ]
-    },
-    {
-      "server_address": "192.168.1.1",
-      "ports": [9090, 9090],
-      "default": false,
-      "error_pages_path": "/var/www/errors",
-      "client_body_size_limit": "50M",
-      "routes": [
-        {
           "path": "/",
-          "methods": ["GET"],
-          "root": "/var/www/html",
-          "default_file": "home.html",
-          "directory_listing": false
+          "methods": ["GET", "POST"],
+          "root": "static",
+          "default_page": "index.html",
+          "directory_listing": true
         }
       ]
     }

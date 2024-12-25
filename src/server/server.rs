@@ -68,19 +68,24 @@ impl Server {
 impl Server {
     pub fn add_host(&mut self, host: Host) -> Result<(), ServerError> {
         self.register_host_with_epoll(&host)?;
+        println!("Added host: {} with ports {:?}", host.server_name, host.listeners);
+    
         self.hosts.push(host);
         Ok(())
     }
 
     fn register_host_with_epoll(&self, host: &Host) -> Result<(), ServerError> {
-        let mut event = epoll_event {
-            events: EPOLL_EVENTS,
-            u64: host.fd as u64
-        };
 
-        unsafe {
-            if epoll_ctl(self.epoll_fd, EPOLL_CTL_ADD, host.fd, &mut event) < 0 {
-                return Err(ServerError::EpollError("Failed to add listener to epoll"));
+        for listener in &host.listeners {
+            let mut event = epoll_event {
+                events: EPOLL_EVENTS,
+                u64: listener.fd as u64
+            };
+
+            unsafe {
+                if epoll_ctl(self.epoll_fd, EPOLL_CTL_ADD, listener.fd, &mut event) < 0 {
+                    return Err(ServerError::EpollError("Failed to add listener to epoll"));
+                }
             }
         }
 
@@ -91,7 +96,10 @@ impl Server {
         let host = self.find_host_by_fd(fd)
             .ok_or_else(|| ServerError::ConnectionError("Host not found".to_string())).unwrap();
 
-        let stream = host.accept_connection().unwrap();
+        let listener = host.get_listener(fd)
+            .ok_or_else(|| ServerError::ConnectionError("Listener not found".to_string())).unwrap();
+        
+        let stream = listener.accept_connection().unwrap();
         let client_fd = stream.as_raw_fd();
 
         let mut event = epoll_event {
@@ -114,13 +122,23 @@ impl Server {
     fn handle_request(&mut self, client_fd: RawFd, host: Host) -> Result<(), ServerError> {
         let connection = self.connections.get_mut(&client_fd).unwrap();
 
+        println!("Handling request for host: {}", host.server_name);
+
         match connection.read_request()? {
             Some(buffer) if !buffer.is_empty() => {
                 let request_str = String::from_utf8_lossy(&buffer);
+                println!("Received request: {}", request_str);
                 if let Some(request) = crate::http::request::parse_request(&request_str) {
-                    if request.method == HttpMethod::GET {
-                        if let Some(mut static_files) = host.static_files {
-                            handle_static_file_request(&mut static_files, request, connection)?;
+                    println!("URI: {}", request.uri);
+                    if let Some(route) = host.get_route(&request.uri) {
+                        println!("Handling route: {:#?}", route);
+                        if request.method == HttpMethod::GET {
+                            println!("Handling GET request: {}", request.uri);
+                            
+                            if let Some(mut static_files) = route.static_files.clone() {
+                                println!("Handling static file request: {}", request.uri);
+                                handle_static_file_request(&mut static_files, request, connection)?;
+                            }
                         }
                     }
                 }
@@ -198,8 +216,9 @@ impl Server {
         self.hosts.iter().find(|&host| host.server_name == name)
     }
 
+
     fn find_host_by_fd(&self, fd: RawFd) -> Option<&Host> {
-        self.hosts.iter().find(|&host| host.fd == fd)
+        self.hosts.iter().find(|&host| host.match_listener(fd))
     }
 }
 

@@ -1,10 +1,8 @@
 use std::net::{TcpListener, TcpStream};
 use std::os::unix::io::{AsRawFd, RawFd};
-use crate::server::static_files::ServerStaticFiles;
 use crate::server::route::Route;
 
-/// Default host address for server binding
-const LOCAL_HOST: &str = "1.0.0.1";
+use super::route;
 
 #[derive(Debug)]
 pub struct HostListener {
@@ -27,8 +25,9 @@ impl HostListener {
     pub fn new(port: String, server_address: String) -> Self {
         let addr = format!("{}:{}", server_address, port);
         let listener = TcpListener::bind(&addr).expect("Failed to bind to address");
-        listener.set_nonblocking(true);
+        listener.set_nonblocking(true).unwrap();
         let fd = listener.as_raw_fd();
+
         HostListener {
             fd,
             listener,
@@ -48,7 +47,6 @@ impl HostListener {
 pub struct Host {
     pub server_address: String,
     pub server_name: String,
-    pub static_files: Option<ServerStaticFiles>,
     pub listeners: Vec<HostListener>,
     pub routes: Vec<Route>,
 }
@@ -60,7 +58,6 @@ impl Clone for Host {
             server_address: self.server_address.clone(),
             server_name: self.server_name.clone(),
             listeners: self.listeners.clone(),
-            static_files: self.static_files.clone(),
             routes: self.routes.clone(),
         }
     }
@@ -71,8 +68,8 @@ impl Host {
     pub fn new(
         server_address: &str,
         server_name: &str,
-        ports: Vec<String>, 
-        server_directory: Option<ServerStaticFiles>
+        ports: Vec<String>,
+        routes: Vec<Route>, 
     ) -> Result<Self, std::io::Error> {
         let mut listeners = Vec::new();
         for port in ports {
@@ -83,13 +80,26 @@ impl Host {
             server_address: server_address.to_string(),
             server_name: server_name.to_string(),
             listeners,
-            static_files: server_directory,
-            routes: Vec::new(),
+            routes,
         })
     }
 
     pub fn add_route(&mut self, route: Route) {
         self.routes.push(route);
+    }
+
+    pub fn get_listener(&self, fd: RawFd) -> Option<&HostListener> {
+        self.listeners.iter().find(|listener| listener.fd == fd)
+    }
+
+    pub fn match_listener(&self, fd: RawFd) -> bool {
+        self.listeners.iter().any(|listener| listener.fd == fd)
+    }
+
+    pub fn get_route(&self, path: &str) -> Option<&Route> {
+        self.routes.iter().find(|route| { 
+            path.starts_with(&route.path) 
+        })
     }
 
 }
