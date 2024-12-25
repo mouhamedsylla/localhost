@@ -28,7 +28,7 @@ fn main() -> Result<(), ServerError> {
             &host_config.port,
             &host_config.name,
             static_files
-        )?;
+        ).expect("Failed to create host");
 
         let _ = servers.add_host(host);
     }

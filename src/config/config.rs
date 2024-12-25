@@ -10,6 +10,7 @@ pub struct StaticFiles {
 
 #[derive(Deserialize)]
 pub struct Host {
+    pub ip: String,
     pub port: String,
     pub name: String,
     pub static_files: Option<StaticFiles>,
