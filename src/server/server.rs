@@ -6,7 +6,6 @@ use crate::http::response::ResponseBuilder;
 use crate::server::static_files::ServerStaticFiles;
 use crate::http::request::HttpMethod;
 use crate::http::header::Header;
-use std::path::Path;
 use crate::http::request::Request;
 use crate::server::connection::Connection;
 use crate::server::host::Host;
@@ -217,12 +216,16 @@ fn handle_static_file_request(static_files: &mut ServerStaticFiles, request: Req
        
            match body {
                Ok(body) => {
-                   let response = response_builder().body(body).header(content_type);
-                   connection.stream.write_all(response.build().to_string().as_bytes())?;
+                   let response = response_builder().body(body).header(content_type).build().to_string();
+                   connection.send_response(response)?;
                },
                Err(e) => {
-                   let response = response_builder().body(Body::text(&e.to_string())).header(Header::from_mime("text/plain"));
-                   connection.stream.write_all(response.build().to_string().as_bytes())?;
+                   let response = response_builder()
+                        .body(Body::text(&e.to_string()))
+                        .header(Header::from_mime("text/plain"))
+                        .build()
+                        .to_string();
+                   connection.send_response(response)?;
                }
            }
 
