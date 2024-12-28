@@ -104,6 +104,18 @@ impl Header {
             },
         }
     }
+
+    pub fn from_str(name: &str, value: &str) -> Header {
+        let header_name = HeaderName::from_str(name);
+        let header_value = HeaderValue {
+            value: value.to_string(),
+            parsed_value: Some(HeaderParsedValue::from_str(&header_name, value)),
+        };
+
+        Header::new(header_name, header_value)
+    }
+
+
 }
 
 // ============= HeaderName Implementations =============

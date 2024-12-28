@@ -94,6 +94,22 @@ impl Body {
         }
     }
 
+    pub fn body_len(&self) -> usize {
+        match self {
+            Body::Text(text) => text.len(),
+            Body::Json(json) => json.to_string().len(),
+            Body::FormUrlEncoded(form) => {
+                let parts: Vec<String> = form
+                    .iter()
+                    .map(|(k, v)| format!("{}={}", k, v))
+                    .collect();
+                parts.join("&").len()
+            }
+            Body::Binary(data) => data.len(),
+            Body::Empty => 0,
+        }
+    }
+
     // Conversion methods
     // pub fn as_text(&self) -> Option<&str> {
     //     match self {

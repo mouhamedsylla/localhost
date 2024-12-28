@@ -80,7 +80,7 @@ impl ServerStaticFiles {
 /// File serving implementation
 impl ServerStaticFiles {
     /// Serves a static file
-    fn serve_file(&self, path: &Path) -> io::Result<(Vec<u8>, Option<mime>)> {
+    pub fn serve_file(&self, path: &Path) -> io::Result<(Vec<u8>, Option<mime>)> {
         if !path.is_file() {
             if path.is_dir() {
                 return self.serve_directory(path);

@@ -2,7 +2,6 @@ use std::net::{TcpListener, TcpStream};
 use std::os::unix::io::{AsRawFd, RawFd};
 use crate::server::route::Route;
 
-use super::route;
 
 #[derive(Debug)]
 pub struct HostListener {

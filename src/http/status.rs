@@ -1,4 +1,6 @@
-#![allow(dead_code)]
+use std::fmt;
+
+#[derive(Debug, Clone)]
 pub enum HttpStatusCode {
     Ok = 200,
     Created = 201,
@@ -31,4 +33,43 @@ pub enum HttpStatusCode {
     ServiceUnavailable = 503,
     GatewayTimeout = 504,
     HTTPVersionNotSupported = 505,
+}
+
+
+impl HttpStatusCode {
+    pub fn as_str(&self) -> &str {
+        match self {
+            HttpStatusCode::Ok => "200 OK",
+            HttpStatusCode::Created => "201 Created",
+            HttpStatusCode::Accepted => "202 Accepted",
+            HttpStatusCode::NoContent => "204 No Content",
+            HttpStatusCode::MovedPermanently => "301 Moved Permanently",
+            HttpStatusCode::Found => "302 Found",
+            HttpStatusCode::SeeOther => "303 See Other",
+            HttpStatusCode::NotModified => "304 Not Modified",
+            HttpStatusCode::TemporaryRedirect => "307 Temporary Redirect",
+            HttpStatusCode::PermanentRedirect => "308 Permanent Redirect",
+            HttpStatusCode::BadRequest => "400 Bad Request",
+            HttpStatusCode::Unauthorized => "401 Unauthorized",
+            HttpStatusCode::Forbidden => "403 Forbidden",
+            HttpStatusCode::NotFound => "404 Not Found",
+            HttpStatusCode::MethodNotAllowed => "405 Method Not Allowed",
+            HttpStatusCode::RequestTimeout => "408 Request Timeout",
+            HttpStatusCode::Conflict => "409 Conflict",
+            HttpStatusCode::Gone => "410 Gone",
+            HttpStatusCode::LengthRequired => "411 Length Required",
+            HttpStatusCode::PreconditionFailed => "412 Precondition Failed",
+            HttpStatusCode::PayloadTooLarge => "413 Payload Too Large",
+            HttpStatusCode::URITooLong => "414 URI Too Long",
+            HttpStatusCode::UnsupportedMediaType => "415 Unsupported Media Type",
+            HttpStatusCode::RangeNotSatisfiable => "416 Range Not Satisfiable",
+            HttpStatusCode::ExpectationFailed => "417 Expectation Failed",
+            HttpStatusCode::InternalServerError => "500 Internal Server Error",
+            HttpStatusCode::NotImplemented => "501 Not Implemented",
+            HttpStatusCode::BadGateway => "502 Bad Gateway",
+            HttpStatusCode::ServiceUnavailable => "503 Service Unavailable",
+            HttpStatusCode::GatewayTimeout => "504 Gateway Timeout",
+            HttpStatusCode::HTTPVersionNotSupported => "505 HTTP Version Not Supported",
+        }
+    }
 }

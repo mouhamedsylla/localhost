@@ -3,6 +3,7 @@ use crate::http::body::Body;
 use crate::http::status::HttpStatusCode;
 use crate::http::header::{HeaderName, HeaderValue, HeaderParsedValue, ContentType};
 
+#[derive(Clone)]
 pub struct Response {
     pub version: String,
     pub status_code: HttpStatusCode,

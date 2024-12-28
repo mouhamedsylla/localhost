@@ -1,72 +1,15 @@
 // Generated directory structure
 export const directoryData = {
-  "/.default": {
+  "/home/another": {
     "items": [
       {
-        "name": "css",
-        "path": "/.default/css",
-        "size": 4096,
-        "type": "directory"
-      },
-      {
-        "name": "directory_listing.html",
-        "path": "/.default/directory_listing.html",
-        "size": 778,
-        "type": "file"
-      },
-      {
-        "name": "error",
-        "path": "/.default/error",
-        "size": 4096,
-        "type": "directory"
-      },
-      {
-        "name": "js",
-        "path": "/.default/js",
+        "name": "one_again",
+        "path": "/home/another/one_again",
         "size": 4096,
         "type": "directory"
       }
     ],
-    "path": "/.default"
-  },
-  "/": {
-    "items": [
-      {
-        "name": ".default",
-        "path": "/.default",
-        "size": 4096,
-        "type": "directory"
-      },
-      {
-        "name": "home",
-        "path": "/home",
-        "size": 4096,
-        "type": "directory"
-      },
-      {
-        "name": "test",
-        "path": "/test",
-        "size": 4096,
-        "type": "directory"
-      },
-      {
-        "name": "index.html",
-        "path": "/index.html",
-        "size": 270,
-        "type": "file"
-      },
-      {
-        "name": "style.css",
-        "path": "/style.css",
-        "size": 35,
-        "type": "file"
-      }
-    ],
-    "path": "/"
-  },
-  "/test": {
-    "items": [],
-    "path": "/test"
+    "path": "/home/another"
   },
   "/home": {
     "items": [
