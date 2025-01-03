@@ -17,6 +17,7 @@ pub struct Host {
     pub ports: Vec<String>,
     pub server_name: String,
     pub routes: Vec<Route>,
+    pub error_pages: Option<String>,
 }
 
 #[derive(Deserialize, Debug)]

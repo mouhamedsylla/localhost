@@ -28,7 +28,7 @@ fn main() -> Result<(), ServerError> {
                 .collect::<Vec<HttpMethod>>();
 
             let static_files = ServerStaticFiles::new(
-                PathBuf::from(r.root), r.default_page, r.directory_listing).unwrap();
+                PathBuf::from(r.root), r.default_page, r.directory_listing, host_config.error_pages.clone()).unwrap();
 
             routes.push(Route { path: r.path, methods , static_files: Some(static_files) });
         }

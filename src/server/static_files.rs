@@ -15,6 +15,7 @@ pub struct ServerStaticFiles {
     pub directory: PathBuf,
     index: String,
     allow_directory_listing: bool,
+    error_pages: Option<String>,
 }
 
 /// Core implementation
@@ -23,6 +24,7 @@ impl ServerStaticFiles {
         directory: PathBuf,
         index: String,
         allow_directory_listing: bool,
+        error_pages: Option<String>,
     ) -> io::Result<Self> {
         // Validate directory exists
         if !directory.exists() {
@@ -55,6 +57,7 @@ impl ServerStaticFiles {
             directory,
             index,
             allow_directory_listing,
+            error_pages,
         })
     }
 
@@ -85,6 +88,9 @@ impl ServerStaticFiles {
             if path.is_dir() {
                 return self.serve_directory(path);
             } else {
+                if let Some(error_page) = &self.error_pages {
+                    return self.serve_file(Path::new(error_page));
+                }
                 let error_page = self.directory.join(".default/error/error_template.html");
                 return self.serve_file(&error_page);
             }

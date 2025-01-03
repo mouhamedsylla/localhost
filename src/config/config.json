@@ -4,8 +4,6 @@
       "server_address": "127.0.0.1",
       "server_name": "localhost",
       "ports": ["8080", "8081"],
-      "default": true,
-      "error_pages_path": "/path/to/error/pages",
       "client_body_size_limit": "10M",
       "routes": [
         {
