@@ -13,16 +13,16 @@ pub enum LogLevel {
 
 impl fmt::Display for LogLevel {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let padding = 5; // Pour aligner tous les niveaux de log
         match self {
-            LogLevel::ERROR => write!(f, "{}", "ERROR".red()),
-            LogLevel::WARN => write!(f, "{}", "WARN".yellow()),
-            LogLevel::INFO => write!(f, "{}", "INFOS".green()),
-            LogLevel::DEBUG => write!(f, "{}", "DEBUG".blue()),
-            LogLevel::TRACE => write!(f, "{}", "TRACE".magenta()),
+            LogLevel::ERROR => write!(f, "{:padding$}", "ERROR".bold().red(), padding = padding),
+            LogLevel::WARN => write!(f, "{:padding$}", "WARN".bold().yellow(), padding = padding),
+            LogLevel::INFO => write!(f, "{:padding$}", "INFO".bold().green(), padding = padding),
+            LogLevel::DEBUG => write!(f, "{:padding$}", "DEBUG".bold().blue(), padding = padding),
+            LogLevel::TRACE => write!(f, "{:padding$}", "TRACE".bold().magenta(), padding = padding),
         }
     }
 }
-
 
 #[derive(Debug)]
 pub struct Logger {
@@ -31,19 +31,20 @@ pub struct Logger {
 
 impl Logger {
     pub fn new(level: LogLevel) -> Self {
-        Logger {
-            level
-        }
+        Logger { level }
     }
 
     pub fn log(&self, level: LogLevel, message: &str, module: &str) {
         if level <= self.level {
             let now = Local::now();
+            let timestamp = now.format("%Y-%m-%d %H:%M:%S%.3f").to_string().dimmed();
+            let module_name = format!("{:>15}", module).cyan();
+            
             let log_entry = format!(
-                "[{}] [{}] [{}] - {}", 
-                level, 
-                now.format("%Y-%m-%d %H:%M:%S"), 
-                module, 
+                "{} {} {} │ {}", 
+                timestamp,
+                level,
+                module_name,
                 message
             );
 
@@ -52,11 +53,11 @@ impl Logger {
     }
 
     pub fn error(&self, message: &str, module: &str) {
-        self.log(LogLevel::ERROR, message, module);
+        self.log(LogLevel::ERROR, &message.red().to_string(), module);
     }
 
     pub fn warn(&self, message: &str, module: &str) {
-        self.log(LogLevel::WARN, message, module);
+        self.log(LogLevel::WARN, &message.yellow().to_string(), module);
     }
 
     pub fn info(&self, message: &str, module: &str) {
@@ -64,10 +65,10 @@ impl Logger {
     }
 
     pub fn debug(&self, message: &str, module: &str) {
-        self.log(LogLevel::DEBUG, message, module);
+        self.log(LogLevel::DEBUG, &message.blue().to_string(), module);
     }
 
     pub fn trace(&self, message: &str, module: &str) {
-        self.log(LogLevel::TRACE, message, module);
+        self.log(LogLevel::TRACE, &message.magenta().to_string(), module);
     }
 }

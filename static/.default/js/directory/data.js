@@ -1,24 +1,30 @@
 // Generated directory structure
 export const directoryData = {
-  "/home": {
+  "/error": {
     "items": [
       {
-        "name": "index.html",
-        "path": "/home/index.html",
-        "size": 229,
+        "name": "404.html",
+        "path": "/error/404.html",
+        "size": 234,
         "type": "file"
-      },
-      {
-        "name": "another",
-        "path": "/home/another",
-        "size": 4096,
-        "type": "directory"
       }
     ],
-    "path": "/home"
+    "path": "/error"
   },
   "/.default": {
     "items": [
+      {
+        "name": "css",
+        "path": "/.default/css",
+        "size": 4096,
+        "type": "directory"
+      },
+      {
+        "name": "directory_listing.html",
+        "path": "/.default/directory_listing.html",
+        "size": 778,
+        "type": "file"
+      },
       {
         "name": "error",
         "path": "/.default/error",
@@ -30,18 +36,6 @@ export const directoryData = {
         "path": "/.default/js",
         "size": 4096,
         "type": "directory"
-      },
-      {
-        "name": "directory_listing.html",
-        "path": "/.default/directory_listing.html",
-        "size": 778,
-        "type": "file"
-      },
-      {
-        "name": "css",
-        "path": "/.default/css",
-        "size": 4096,
-        "type": "directory"
       }
     ],
     "path": "/.default"
@@ -49,14 +43,20 @@ export const directoryData = {
   "/": {
     "items": [
       {
-        "name": "index.html",
-        "path": "/index.html",
-        "size": 270,
-        "type": "file"
+        "name": ".default",
+        "path": "/.default",
+        "size": 4096,
+        "type": "directory"
       },
       {
         "name": "home",
         "path": "/home",
+        "size": 4096,
+        "type": "directory"
+      },
+      {
+        "name": "test",
+        "path": "/test",
         "size": 4096,
         "type": "directory"
       },
@@ -73,23 +73,33 @@ export const directoryData = {
         "type": "file"
       },
       {
-        "name": ".default",
-        "path": "/.default",
-        "size": 4096,
-        "type": "directory"
+        "name": "error.html",
+        "path": "/error.html",
+        "size": 225,
+        "type": "file"
       }
     ],
     "path": "/"
   },
-  "/error": {
+  "/test": {
+    "items": [],
+    "path": "/test"
+  },
+  "/home": {
     "items": [
       {
-        "name": "404.html",
-        "path": "/error/404.html",
-        "size": 234,
+        "name": "index.html",
+        "path": "/home/index.html",
+        "size": 229,
         "type": "file"
+      },
+      {
+        "name": "another",
+        "path": "/home/another",
+        "size": 4096,
+        "type": "directory"
       }
     ],
-    "path": "/error"
+    "path": "/home"
   }
 };

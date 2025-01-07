@@ -3,10 +3,108 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
-    <link rel="stylesheet" href="style.css">
+    <title>LocalHost - HTTP Server</title>
+    <link rel="stylesheet" href="/.default/css/common.css">
+    <link rel="stylesheet" href="./style.css">
 </head>
 <body>
-    <h1>Hello World</h1>
+    <div class="scanlines"></div>
+    <div class="container">
+        <div class="glitch-wrapper">
+            <h1 class="directory-title">LOCALHOST</h1>
+        </div>
+        
+        <div class="terminal">
+            <p class="terminal-line">> Initializing HTTP server components...</p>
+            <p class="terminal-line">> Loading server configuration...</p>
+            <p class="terminal-line">> Configuring virtual hosts...</p>
+            <p class="terminal-line">> Server initialization complete.</p>
+            <p class="terminal-line">> Waiting for incoming connections...</p>
+        </div>
+
+        <div class="features">
+            <div class="feature-card">
+                <div class="feature-title">HTTP/1.1 Protocol</div>
+                <div class="feature-description">
+                    Complete HTTP/1.1 implementation with persistent connections, chunked transfer encoding, and comprehensive header management.
+                </div>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-title">High Performance</div>
+                <div class="feature-description">
+                    Built with Rust for maximum efficiency, utilizing non-blocking I/O with epoll for optimal concurrency and resource management.
+                </div>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-title">Virtual Hosts</div>
+                <div class="feature-description">
+                    Support for multiple domains with independent configurations. Easy setup through JSON configuration files.
+                </div>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-title">Advanced File Serving</div>
+                <div class="feature-description">
+                    Smart static file handling with directory listing, custom error pages, and configurable access controls.
+                </div>
+            </div>
+        </div>
+
+        <div class="server-status">
+            <div class="status-grid">
+                <div class="status-item">
+                    <div class="status-label">Status</div>
+                    <div class="status-value status-running">Active</div>
+                </div>
+                <div class="status-item">
+                    <div class="status-label">Configuration</div>
+                    <div class="status-value config-path">/config/server.json</div>
+                </div>
+                <div class="status-item">
+                    <div class="status-label">Version</div>
+                    <div class="status-value">1.0.0</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function loadServerConfig() {
+            try {
+                const response = await fetch('/api/server/status');
+                const config = await response.json();
+                updateServerStatus(config);
+            } catch (error) {
+                console.error('Failed to load server configuration:', error);
+            }
+        }
+
+        function updateServerStatus(config) {
+            const runningStatus = document.querySelector('.status-running');
+            const configPath = document.querySelector('.config-path');
+            
+            if (config) {
+                runningStatus.textContent = config.status || 'Active';
+                configPath.textContent = config.configPath || '/config/server.json';
+            }
+        }
+
+        function animateTerminal() {
+            const lines = document.querySelectorAll('.terminal-line');
+            lines.forEach((line, index) => {
+                line.style.opacity = '0';
+                setTimeout(() => {
+                    line.style.opacity = '1';
+                }, index * 1000);
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            animateTerminal();
+            loadServerConfig();
+        });
+    </script>
 </body>
 </html>

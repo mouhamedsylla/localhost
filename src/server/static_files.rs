@@ -9,20 +9,30 @@ use serde_json::{json, Value};
 /// Type alias for MIME type strings
 pub type mime = String;
 
+/// Enum for file status
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FileStatus {
+    Ok,
+    NotFound,
+    DirectoryListingNotAllowed,
+    Raw
+}
+
 /// Configuration for serving static files
 #[derive(Debug, Clone)]
 pub struct ServerStaticFiles {
     pub directory: PathBuf,
-    index: String,
+    index: Option<String>,
     allow_directory_listing: bool,
     error_pages: Option<String>,
+    status: FileStatus,
 }
 
 /// Core implementation
 impl ServerStaticFiles {
     pub fn new(
         directory: PathBuf,
-        index: String,
+        index: Option<String>,
         allow_directory_listing: bool,
         error_pages: Option<String>,
     ) -> io::Result<Self> {
@@ -35,14 +45,15 @@ impl ServerStaticFiles {
         }
 
         // Validate index file if specified
-        if !index.is_empty() {
-            if !directory.join(&index).exists() {
-                return Err(io::Error::new(
-                    io::ErrorKind::NotFound,
-                    "Index file not found",
-                ));
-            }
-        }
+
+        // if !index.is_empty() {
+        //     if !directory.join(&index).exists() {
+        //         return Err(io::Error::new(
+        //             io::ErrorKind::NotFound,
+        //             "Index file not found",
+        //         ));
+        //     }
+        // }
 
         // Create default directory if missing
         let default_dir = directory.join(".default");
@@ -58,12 +69,20 @@ impl ServerStaticFiles {
             index,
             allow_directory_listing,
             error_pages,
+            status: FileStatus::Raw,
         })
     }
 
-    pub fn serve_static(&mut self, path: &str) -> io::Result<(Vec<u8>, Option<mime>)> {
+    pub fn serve_static(&mut self, path: &str) -> io::Result<(Vec<u8>, Option<mime>, FileStatus)> {
         let path = path.trim_start_matches('/');
         let full_path = self.directory.join(path);
+
+        if let Some(index) = &self.index  {
+            let index_path = self.directory.join(index);
+            if index_path.is_file() && full_path == self.directory {
+                return self.serve_file(&index_path);
+            }
+        }
 
         if full_path.is_dir() {
             if self.allow_directory_listing {
@@ -83,16 +102,19 @@ impl ServerStaticFiles {
 /// File serving implementation
 impl ServerStaticFiles {
     /// Serves a static file
-    pub fn serve_file(&self, path: &Path) -> io::Result<(Vec<u8>, Option<mime>)> {
+    pub fn serve_file(&mut self, path: &Path) -> io::Result<(Vec<u8>, Option<mime>, FileStatus)> {
+
         if !path.is_file() {
             if path.is_dir() {
                 return self.serve_directory(path);
             } else {
-                if let Some(error_page) = &self.error_pages {
-                    return self.serve_file(Path::new(error_page));
+                self.set_status(FileStatus::NotFound);
+                if let Some(error_page) = self.error_pages.clone() {
+                    return self.serve_file(Path::new(&error_page));
                 }
-                let error_page = self.directory.join(".default/error/error_template.html");
-                return self.serve_file(&error_page);
+                
+                let error_page = self.directory.join(".default/error/error_template.html");            
+                return self.serve_file(&error_page);    
             }
         }
 
@@ -101,7 +123,7 @@ impl ServerStaticFiles {
         file.read_to_end(&mut buffer)?;
         
         let mime = self.get_mime_type(path);
-        Ok((buffer, Some(mime)))
+        Ok((buffer, Some(mime), self.status.clone()))
     }
 
     /// Gets MIME type for a file path
@@ -113,7 +135,7 @@ impl ServerStaticFiles {
 /// Directory handling implementation
 impl ServerStaticFiles {
     /// Serves a directory listing
-    fn serve_directory(&self, path: &Path) -> io::Result<(Vec<u8>, Option<mime>)> {
+    fn serve_directory(&mut self, path: &Path) -> io::Result<(Vec<u8>, Option<mime>, FileStatus)> {
         self.write_directory_data(path)?;
 
         let serve_dir_html = self
@@ -190,6 +212,10 @@ impl ServerStaticFiles {
         fs::write(data_js_path, js_content)?;
 
         Ok(())
+    }
+
+    fn set_status(&mut self, status: FileStatus) {
+        self.status = status;
     }
 }
 

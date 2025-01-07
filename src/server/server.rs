@@ -9,7 +9,8 @@ use crate::http::response::{self, Response, ResponseBuilder};
 use crate::server::connection::Connection;
 use crate::server::host::Host;
 use crate::server::logger::{Logger, LogLevel};
-use crate::server::static_files::ServerStaticFiles;
+use crate::server::static_files::{ServerStaticFiles, FileStatus};
+use crate::http::status::HttpStatusCode;
 use libc::{
     epoll_create1, epoll_ctl, epoll_event, epoll_wait, 
     EPOLLET, EPOLLIN, EPOLLHUP, EPOLLERR,
@@ -163,7 +164,7 @@ impl Server {
                     }
                     connection.start_time = Instant::now();
                     connection.keep_alive = want_keep_alive(request);
-                    should_close = !connection.keep_alive;
+                    should_close = connection.keep_alive;
                 }
             },
             Some(_) => (),
@@ -172,7 +173,7 @@ impl Server {
             }
         }
 
-        if should_close {
+        if !should_close {
             self.close_connection(client_fd)?;
         }
 
@@ -284,27 +285,34 @@ fn handle_static_file_request(static_files: &mut ServerStaticFiles, request: Req
 -> Result<Response, ServerError> 
 {
    match static_files.serve_static(&request.uri) {
-       Ok((content, mime)) => {
+       Ok((content, mime, file_status)) => {
            let mime_str = mime.map_or_else(|| "text/plain".to_string(), |m| m.to_string());
            let content_type = Header::from_mime(&mime_str);
 
            let keep_alive = if connection.keep_alive {
                connection.keep_alive = true;
-               //println!("Connection: keep-alive");
                Header::from_str("connection", "keep-alive")
            } else {
-                println!("Connection: close");
                 //connection.keep_alive = false;
                Header::from_str("connection", "close")
            };
 
            let body = Body::from_mime(&mime_str, content);
            let response_builder = ResponseBuilder::new();
+           
+           // set status based on file_status
+
 
            match body {
                Ok(body) => {
                    let content_length = Header::from_str("content-length", &body.body_len().to_string());
+                   let status_code = if file_status == FileStatus::NotFound {
+                       HttpStatusCode::NotFound
+                   } else {
+                        HttpStatusCode::Ok
+                   };
                    let response = response_builder.body(body)
+                    .status_code(status_code)
                     .header(content_length)
                     .header(content_type)
                     .header(keep_alive)

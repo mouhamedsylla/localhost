@@ -7,7 +7,7 @@ pub struct Route {
     pub path: String,
     pub methods: Vec<String>,
     pub root: String,
-    pub default_page: String,
+    pub default_page: Option<String>,
     pub directory_listing: bool,
 }
 
@@ -31,3 +31,5 @@ pub fn load_config() -> std::io::Result<Server> {
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
     Ok(config)
 }
+
+
