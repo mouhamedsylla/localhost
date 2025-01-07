@@ -77,23 +77,19 @@ impl ServerStaticFiles {
         let path = path.trim_start_matches('/');
         let full_path = self.directory.join(path);
 
+        if full_path.is_dir() {
+            if self.allow_directory_listing {
+                return self.serve_directory(&full_path);
+            }
+        }
+
         if let Some(index) = &self.index  {
             let index_path = self.directory.join(index);
-            if index_path.is_file() && full_path == self.directory {
+            if index_path.is_file() && full_path == self.directory && !self.allow_directory_listing {
                 return self.serve_file(&index_path);
             }
         }
 
-        if full_path.is_dir() {
-            if self.allow_directory_listing {
-                return self.serve_directory(&full_path);
-            } else {
-                return Err(io::Error::new(
-                    io::ErrorKind::NotFound,
-                    "Directory listing not allowed",
-                ));
-            }
-        }
 
         self.serve_file(&full_path)
     }
@@ -105,17 +101,13 @@ impl ServerStaticFiles {
     pub fn serve_file(&mut self, path: &Path) -> io::Result<(Vec<u8>, Option<mime>, FileStatus)> {
 
         if !path.is_file() {
-            if path.is_dir() {
-                return self.serve_directory(path);
-            } else {
-                self.set_status(FileStatus::NotFound);
-                if let Some(error_page) = self.error_pages.clone() {
-                    return self.serve_file(Path::new(&error_page));
-                }
-                
-                let error_page = self.directory.join(".default/error/error_template.html");            
-                return self.serve_file(&error_page);    
+            self.set_status(FileStatus::NotFound);
+            if let Some(error_page) = self.error_pages.clone() {
+                return self.serve_file(Path::new(&error_page));
             }
+            
+            let error_page = self.directory.join(".default/error/error_template.html");            
+            return self.serve_file(&error_page);    
         }
 
         let mut file = fs::File::open(path)?;
