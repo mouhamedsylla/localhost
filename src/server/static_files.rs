@@ -44,6 +44,17 @@ impl ServerStaticFiles {
             ));
         }
 
+        // Validate index file if specified
+
+        // if !index.is_empty() {
+        //     if !directory.join(&index).exists() {
+        //         return Err(io::Error::new(
+        //             io::ErrorKind::NotFound,
+        //             "Index file not found",
+        //         ));
+        //     }
+        // }
+
         // Create default directory if missing
         let default_dir = directory.join(".default");
         if !default_dir.exists() {
@@ -63,6 +74,8 @@ impl ServerStaticFiles {
     }
 
     pub fn serve_static(&mut self, path: &str) -> io::Result<(Vec<u8>, Option<mime>, FileStatus)> {
+        let defaultPath = self.directory.join(".default/index.html");
+
         let path = path.trim_start_matches('/');
         let full_path = self.directory.join(path);
 
@@ -79,6 +92,9 @@ impl ServerStaticFiles {
             }
         }
 
+        if self.index.is_none() && full_path == self.directory {
+            return self.serve_file(&defaultPath);
+        }
 
         self.serve_file(&full_path)
     }
