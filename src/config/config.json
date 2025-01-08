@@ -10,9 +10,21 @@
           "path": "/",
           "methods": ["GET", "POST"],
           "root": "static",
-          "default_page": "index.html",
-          "directory_listing": true,
-          "cgi_script": "static/cgi-bin/main.py"
+          "directory_listing": false
+        }
+      ]
+    },
+    {
+      "server_address": "0.0.0.0",
+      "server_name": "localserver",
+      "ports": ["8082"],
+      "client_body_size_limit": "10M",
+      "routes": [
+        {
+          "path": "/",
+          "methods": ["GET", "POST"],
+          "root": "static",
+          "directory_listing": false
         }
       ]
     }

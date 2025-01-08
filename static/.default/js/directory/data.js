@@ -1,21 +1,10 @@
 // Generated directory structure
 export const directoryData = {
-  "/error": {
-    "items": [
-      {
-        "name": "404.html",
-        "path": "/error/404.html",
-        "size": 234,
-        "type": "file"
-      }
-    ],
-    "path": "/error"
-  },
   "/.default": {
     "items": [
       {
-        "name": "css",
-        "path": "/.default/css",
+        "name": "error",
+        "path": "/.default/error",
         "size": 4096,
         "type": "directory"
       },
@@ -26,8 +15,8 @@ export const directoryData = {
         "type": "file"
       },
       {
-        "name": "error",
-        "path": "/.default/error",
+        "name": "css",
+        "path": "/.default/css",
         "size": 4096,
         "type": "directory"
       },
@@ -40,8 +29,37 @@ export const directoryData = {
     ],
     "path": "/.default"
   },
+  "/home": {
+    "items": [
+      {
+        "name": "another",
+        "path": "/home/another",
+        "size": 4096,
+        "type": "directory"
+      },
+      {
+        "name": "index.html",
+        "path": "/home/index.html",
+        "size": 229,
+        "type": "file"
+      }
+    ],
+    "path": "/home"
+  },
   "/": {
     "items": [
+      {
+        "name": "error",
+        "path": "/error",
+        "size": 4096,
+        "type": "directory"
+      },
+      {
+        "name": "style.css",
+        "path": "/style.css",
+        "size": 2195,
+        "type": "file"
+      },
       {
         "name": ".default",
         "path": "/.default",
@@ -55,51 +73,23 @@ export const directoryData = {
         "type": "directory"
       },
       {
-        "name": "test",
-        "path": "/test",
-        "size": 4096,
-        "type": "directory"
-      },
-      {
-        "name": "error",
-        "path": "/error",
-        "size": 4096,
-        "type": "directory"
-      },
-      {
-        "name": "style.css",
-        "path": "/style.css",
-        "size": 35,
-        "type": "file"
-      },
-      {
-        "name": "error.html",
-        "path": "/error.html",
-        "size": 225,
+        "name": "index.html",
+        "path": "/index.html",
+        "size": 4308,
         "type": "file"
       }
     ],
     "path": "/"
   },
-  "/test": {
-    "items": [],
-    "path": "/test"
-  },
-  "/home": {
+  "/error": {
     "items": [
       {
-        "name": "index.html",
-        "path": "/home/index.html",
-        "size": 229,
+        "name": "404.html",
+        "path": "/error/404.html",
+        "size": 234,
         "type": "file"
-      },
-      {
-        "name": "another",
-        "path": "/home/another",
-        "size": 4096,
-        "type": "directory"
       }
     ],
-    "path": "/home"
+    "path": "/error"
   }
 };
