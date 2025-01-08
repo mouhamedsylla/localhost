@@ -35,7 +35,8 @@ impl HostListener {
     }
 
     pub fn accept_connection(&self) -> std::io::Result<TcpStream> {
-        let (stream, _) = self.listener.accept()?;
+        let (stream, addr) = self.listener.accept()?;
+        println!("Connection from: {}", addr);
         stream.set_nonblocking(true)?;
         Ok(stream)
     }

@@ -11,7 +11,8 @@
           "methods": ["GET", "POST"],
           "root": "static",
           "default_page": "index.html",
-          "directory_listing": true
+          "directory_listing": true,
+          "cgi_script": "static/cgi-bin/main.py"
         }
       ]
     }

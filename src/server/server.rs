@@ -1,4 +1,5 @@
 use std::os::fd::AsRawFd;
+use std::path::Path;
 use std::time::{Instant, Duration};
 use std::{collections::HashMap, os::unix::io::RawFd};
 use crate::http::body::Body;
@@ -153,12 +154,18 @@ impl Server {
                 if let Some(request) = crate::http::request::parse_request(&request_str) {
 
                     if let Some(route) = host.get_route(&request.uri.clone()) {
-                        if request.method == HttpMethod::GET {                            
-                            if let Some(mut static_files) = route.static_files.clone() {
+                        if request.method == HttpMethod::GET {
+                            if let Some(cgi_handler) = route.cgi_handler.clone() {
+                                let script = Path::new(&cgi_handler.script_dir);
+                                let response = cgi_handler.handle_request(&request, &script)?;
+                                connection.send_response(response.clone().to_string())?;
+                                let message = format!("GET - {} - {}", &request.uri, response.status_code.as_str());
+                                self.logger.info(&message, "Server");
+                            } else                            
+                                if let Some(mut static_files) = route.static_files.clone() {
                                 let response = handle_static_file_request(&mut static_files, request.clone(), connection)?;
                                 let message = format!("GET - {} - {}", &request.uri, response.status_code.as_str());
-                                self.logger.info(&message, "server");
-                                
+                                self.logger.info(&message, "Server");
                             }
                         }
                     }

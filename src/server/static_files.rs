@@ -44,17 +44,6 @@ impl ServerStaticFiles {
             ));
         }
 
-        // Validate index file if specified
-
-        // if !index.is_empty() {
-        //     if !directory.join(&index).exists() {
-        //         return Err(io::Error::new(
-        //             io::ErrorKind::NotFound,
-        //             "Index file not found",
-        //         ));
-        //     }
-        // }
-
         // Create default directory if missing
         let default_dir = directory.join(".default");
         if !default_dir.exists() {

@@ -1,7 +1,6 @@
 use serde::Deserialize;
 use std::fs;
 
-
 #[derive(Deserialize, Debug)]
 pub struct Route {
     pub path: String,
@@ -9,6 +8,7 @@ pub struct Route {
     pub root: String,
     pub default_page: Option<String>,
     pub directory_listing: bool,
+    pub cgi_script: Option<String>,
 }
 
 #[derive(Deserialize, Debug)]
