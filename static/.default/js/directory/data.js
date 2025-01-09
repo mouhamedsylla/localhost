@@ -1,13 +1,48 @@
 // Generated directory structure
 export const directoryData = {
-  "/.default": {
+  "/": {
     "items": [
       {
-        "name": "error",
-        "path": "/.default/error",
+        "name": "cgi-bin",
+        "path": "/cgi-bin",
         "size": 4096,
         "type": "directory"
       },
+      {
+        "name": "error",
+        "path": "/error",
+        "size": 4096,
+        "type": "directory"
+      },
+      {
+        "name": "home",
+        "path": "/home",
+        "size": 4096,
+        "type": "directory"
+      },
+      {
+        "name": "index.html",
+        "path": "/index.html",
+        "size": 4308,
+        "type": "file"
+      },
+      {
+        "name": ".default",
+        "path": "/.default",
+        "size": 4096,
+        "type": "directory"
+      },
+      {
+        "name": "style.css",
+        "path": "/style.css",
+        "size": 2195,
+        "type": "file"
+      }
+    ],
+    "path": "/"
+  },
+  "/.default": {
+    "items": [
       {
         "name": "directory_listing.html",
         "path": "/.default/directory_listing.html",
@@ -17,6 +52,12 @@ export const directoryData = {
       {
         "name": "css",
         "path": "/.default/css",
+        "size": 4096,
+        "type": "directory"
+      },
+      {
+        "name": "error",
+        "path": "/.default/error",
         "size": 4096,
         "type": "directory"
       },
@@ -46,40 +87,16 @@ export const directoryData = {
     ],
     "path": "/home"
   },
-  "/": {
+  "/cgi-bin": {
     "items": [
       {
-        "name": "error",
-        "path": "/error",
-        "size": 4096,
-        "type": "directory"
-      },
-      {
-        "name": "style.css",
-        "path": "/style.css",
-        "size": 2195,
-        "type": "file"
-      },
-      {
-        "name": ".default",
-        "path": "/.default",
-        "size": 4096,
-        "type": "directory"
-      },
-      {
-        "name": "home",
-        "path": "/home",
-        "size": 4096,
-        "type": "directory"
-      },
-      {
-        "name": "index.html",
-        "path": "/index.html",
-        "size": 4308,
+        "name": "main.py",
+        "path": "/cgi-bin/main.py",
+        "size": 1798,
         "type": "file"
       }
     ],
-    "path": "/"
+    "path": "/cgi-bin"
   },
   "/error": {
     "items": [

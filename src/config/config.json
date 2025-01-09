@@ -10,7 +10,8 @@
           "path": "/",
           "methods": ["GET", "POST"],
           "root": "static",
-          "directory_listing": false
+          "default_page": "index.html",
+          "directory_listing": true
         }
       ]
     },
