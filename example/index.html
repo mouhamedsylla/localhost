@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CyberVault</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>CyberVault</h1>
+            <p>Système de Gestion de Fichiers Futuriste</p>
+        </header>
+
+        <div class="drop-zone" id="dropZone">
+            <div class="icon">📁</div>
+            <p>Glissez un fichier ou</p>
+            <label class="upload-btn">
+                Parcourir
+                <input type="file" id="fileInput" hidden>
+            </label>
+        </div>
+
+        <div class="files-list" id="filesList">
+            <!-- Les fichiers seront ajoutés ici -->
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>

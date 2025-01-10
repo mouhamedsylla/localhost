@@ -49,7 +49,7 @@ mod tests {
     #[test]
     fn test_parse_request() {
         let request_str = "GET /test HTTP/1.1\r\nHost: localhost:8080\r\n\r\n";
-        let request = parse_request(request_str);
+        let request = parse_request(request_str.as_bytes());
 
         assert!(request.is_some());
         let request = request.unwrap();

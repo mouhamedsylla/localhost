@@ -170,12 +170,14 @@ impl ServerStaticFiles {
         }))
     }
 
+
     /// Writes directory listing data to a file
     fn write_directory_data(&self, path: &Path) -> io::Result<()> {
         let mut structure = std::collections::HashMap::new();
 
         // Generate data for current directory
         let current_dir_data = self.generate_directory_data(path)?;
+        println!("current data dir: {:#?}", current_dir_data);
         structure.insert(
             current_dir_data["path"].as_str().unwrap_or("/").to_string(),
             current_dir_data,

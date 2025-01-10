@@ -2,7 +2,8 @@ use serde_json;
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
 use std::fmt;
-
+use std::str;
+use crate::http::header::{ParsedContentDisposition, ParsedContentType, Header, HeaderName, ContentType};
 // ============= Type Definitions =============
 pub type JsonValue = serde_json::Value;
 pub type BinaryData = Vec<u8>;
@@ -16,12 +17,26 @@ pub enum Body {
     Json(JsonValue),
     FormUrlEncoded(FormUrlEncoded),
     Binary(BinaryData),
+    Multipart(MultipartForm),
     Empty,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct FormUrlEncoded {
     data: FormData,
+}
+
+#[derive(Debug, Clone)]
+pub struct MultipartFile {
+    pub filename: String,
+    pub content_type: String,
+    pub data: BinaryData,
+}
+
+#[derive(Debug, Clone)]
+pub struct MultipartForm {
+    pub fields: HashMap<String, String>,
+    pub files: HashMap<String, MultipartFile>,
 }
 
 // ============= Error Handling =============
@@ -31,6 +46,8 @@ pub enum BodyError {
     InvalidJson(String),
     UnsupportedMimeType(String),
     ParseError(String),
+    MultipartError(String),
+    EmptyBody(String),
 }
 
 impl std::error::Error for BodyError {}
@@ -42,7 +59,70 @@ impl fmt::Display for BodyError {
             BodyError::InvalidJson(msg) => write!(f, "Invalid JSON: {}", msg),
             BodyError::UnsupportedMimeType(mime) => write!(f, "Unsupported MIME type: {}", mime),
             BodyError::ParseError(msg) => write!(f, "Parse error: {}", msg),
+            BodyError::MultipartError(msg) => write!(f, "Multipart error: {}", msg),
+            BodyError::EmptyBody(msg) => write!(f, "Empty body: {}", msg),
         }
+    }
+}
+
+// ============= MultipartForm Implementations =============
+impl MultipartForm {
+    pub fn new() -> Self {
+        MultipartForm {
+            fields: HashMap::new(),
+            files: HashMap::new(),
+        }
+    }
+
+    pub fn set_data(
+        &mut self,
+        data: BinaryData, 
+        boundary: &str, 
+    ) {
+        let boundary = format!("--{}", boundary);
+        let parts = split_multipart(&data, boundary.as_bytes());
+
+        for part in parts {
+            if let Some((headers, data)) = parse_part(&part) {
+                if let Some(cd_header) = headers.iter().find(|h| h.name == HeaderName::ContentDisposition) {
+                    if let Some(ct_header) = headers.iter().find(|h| h.name == HeaderName::ContentType) {
+                        let parsed_content_disposition = ParsedContentDisposition::parse_content_disposition(cd_header).unwrap();
+                        let parsed_content_type = ContentType::parse_content_type(ct_header).unwrap();
+                        
+                        if let Some(name) = parsed_content_disposition.params.get("name") {
+                            if let Some(filename) = parsed_content_disposition.params.get("filename") {
+                                let file = MultipartFile {
+                                    filename: filename.to_string(),
+                                    content_type: parsed_content_type.mime,
+                                    data
+                                };
+                                self.files.insert(name.to_string(), file);
+                            } else {
+                                if let Ok(text) = std::str::from_utf8(&data) {
+                                    self.fields.insert(name.to_string(), text.to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn add_field(&mut self, name: &str, value: &str) {
+        self.fields.insert(name.to_string(), value.to_string());
+    }
+
+    pub fn add_file(&mut self, name: &str, file: MultipartFile) {
+        self.files.insert(name.to_string(), file);
+    }
+
+    pub fn get_field(&self, name: &str) -> Option<&String> {
+        self.fields.get(name)
+    }
+
+    pub fn get_file(&self, name: &str) -> Option<&MultipartFile> {
+        self.files.get(name)
     }
 }
 
@@ -70,9 +150,9 @@ impl Body {
     }
 
     // Content-Type based creation
-    pub fn from_mime(mime: &str, data: BinaryData) -> Result<Body, BodyError> {
+    pub fn from_mime(mime: &str, data: BinaryData, boundary: Option<&str>) -> Result<Body, BodyError> {
         match mime.to_lowercase().as_str() {
-            "text/plain" | "text/html" | "text/css" | "text/javascript" | "video/mp4" => {
+            "text/plain" | "text/html" | "text/css" | "text/javascript" => {
                 let text = std::str::from_utf8(&data)
                     .map_err(|_| BodyError::InvalidUtf8(mime.to_string()))?;
                 Ok(Body::text(text))
@@ -89,8 +169,21 @@ impl Body {
                 form.parse_str(form_str)?;
                 Ok(Body::form(form))
             }
+            "multipart/form-data" => {
+                if let Some(boundary) = boundary {
+                    let mut form = MultipartForm::new();
+                    form.set_data(data, boundary);
+                    Ok(Body::Multipart(form))
+                } else {
+                    Err(BodyError::MultipartError("Missing boundary".to_string()))
+                }
+            }
+            "image/jpeg" | "image/png" | "image/gif" | "image/webp" | "image/svg+xml" => {
+                Ok(Body::Binary(data))
+            }    
             "application/octet-stream" => Ok(Body::binary(data)),
             _ => Err(BodyError::UnsupportedMimeType(mime.to_string())),
+
         }
     }
 
@@ -106,39 +199,54 @@ impl Body {
                 parts.join("&").len()
             }
             Body::Binary(data) => data.len(),
+            Body::Multipart(data) => {
+                let fields_len: usize = data.fields.iter().map(|(k, v)| k.len() + v.len()).sum();
+                let files_len: usize = data.files.iter().map(|(k, v)| k.len() + v.filename.len() + v.content_type.len() + v.data.len()).sum();
+                fields_len + files_len
+            }
             Body::Empty => 0,
         }
     }
 
     // Conversion methods
-    // pub fn as_text(&self) -> Option<&str> {
-    //     match self {
-    //         Body::Text(text) => Some(text),
-    //         _ => None,
-    //     }
-    // }
+    pub fn as_text(&self) -> Option<&str> {
+        match self {
+            Body::Text(text) => Some(text),
+            _ => None,
+        }
+    }
 
-    // pub fn as_json(&self) -> Option<&JsonValue> {
-    //     match self {
-    //         Body::Json(json) => Some(json),
-    //         _ => None,
-    //     }
-    // }
+    pub fn as_json(&self) -> Option<&JsonValue> {
+        match self {
+            Body::Json(json) => Some(json),
+            _ => None,
+        }
+    }
 
-    // pub fn as_form(&self) -> Option<&FormUrlEncoded> {
-    //     match self {
-    //         Body::FormUrlEncoded(form) => Some(form),
-    //         _ => None,
-    //     }
-    // }
+    pub fn as_form(&self) -> Option<&FormUrlEncoded> {
+        match self {
+            Body::FormUrlEncoded(form) => Some(form),
+            _ => None,
+        }
+    }
 
-    // pub fn as_binary(&self) -> Option<&BinaryData> {
-    //     match self {
-    //         Body::Binary(data) => Some(data),
-    //         _ => None,
-    //     }
-    // }
+    pub fn as_binary(&self) -> Option<&BinaryData> {
+        match self {
+            Body::Binary(data) => Some(data),
+            _ => None,
+        }
+    }
+
+    pub fn as_multipart(&self) -> Option<&MultipartForm> {
+        match self {
+            Body::Multipart(form) => Some(form),
+            _ => None,
+        }
+    }
 }
+
+// Body Parsing
+
 
 // ============= FormUrlEncoded Implementations =============
 impl FormUrlEncoded {
@@ -187,7 +295,53 @@ impl fmt::Display for Body {
                 write!(f, "{}", parts.join("&"))
             }
             Body::Binary(data) => write!(f, "<{} bytes of binary data>", data.len()),
+            Body::Multipart(form) => {
+                write!(f, "Multipart Form (Fields: {}, Files: {})", 
+                    form.fields.len(), 
+                    form.files.len()
+                )
+            }
             Body::Empty => write!(f, ""),
         }
     }
+}
+
+// ============= Utility functions for multipart parsing =============
+fn split_multipart(data: &[u8], boundary: &[u8]) -> Vec<Vec<u8>> {
+    let mut parts = Vec::new();
+    let mut current_pos = 0;
+
+    while let Some(pos) = find_subsequence(&data[current_pos..], boundary) {
+        if current_pos > 0 {
+            parts.push(data[current_pos..current_pos + pos - 2].to_vec());
+        }
+        current_pos += pos + boundary.len();
+    }
+    parts
+}
+
+fn parse_part(part: &[u8]) -> Option<(Vec<Header>, Vec<u8>)> {
+    let mut headers = Vec::new();
+    let mut pos = 0;
+    
+    while let Some(line_end) = find_subsequence(&part[pos..], b"\r\n") {
+        if line_end == 2 {
+            pos += 4;
+            break;
+        }
+        
+        if let Ok(line) = str::from_utf8(&part[pos..pos + line_end]) {
+            if let Some((name, value)) = line.split_once(':') {
+                headers.push(Header::from_str(name, value));
+            }
+        }
+        pos += line_end + 2;
+    }
+    
+    Some((headers, part[pos..].to_vec()))
+}
+
+fn find_subsequence(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack.windows(needle.len())
+        .position(|window| window == needle)
 }

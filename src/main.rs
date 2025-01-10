@@ -11,13 +11,17 @@ use crate::server::host::Host;
 use crate::server::static_files::ServerStaticFiles;
 use crate::cgi::handler::CGIHandler;
 use config::config::load_config;
+use std::path::Path;
 use std::path::PathBuf;
 use crate::server::route::Route;
 use crate::http::request::HttpMethod;
+use crate::server::uploader::Uploader;
 
 
 fn main() -> Result<(), ServerError> {
-    let mut servers = Server::new().unwrap();
+    let uploader = Uploader::new(Path::new("example/upload"));
+
+    let mut servers = Server::new(Some(uploader)).unwrap();
     
     let config = load_config().unwrap();
     

@@ -1,0 +1,127 @@
+:root {
+    --primary: #06B6D4;
+    --secondary: #A855F7;
+    --bg-dark: #111827;
+    --bg-card: #1F2937;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    background-color: var(--bg-dark);
+    color: var(--primary);
+    font-family: system-ui, -apple-system, sans-serif;
+}
+
+.container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+header {
+    text-align: center;
+    margin-bottom: 3rem;
+}
+
+h1 {
+    font-size: 3rem;
+    margin: 0;
+    background: linear-gradient(to right, var(--primary), var(--secondary));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: neonPulse 2s infinite;
+}
+
+@keyframes neonPulse {
+    0%, 100% {
+        text-shadow: 0 0 7px var(--primary),
+                    0 0 10px var(--primary),
+                    0 0 21px var(--primary);
+    }
+    50% {
+        text-shadow: 0 0 5px var(--primary),
+                    0 0 7px var(--primary),
+                    0 0 15px var(--primary);
+    }
+}
+
+.drop-zone {
+    border: 2px dashed var(--primary);
+    border-radius: 8px;
+    padding: 2rem;
+    text-align: center;
+    margin-bottom: 2rem;
+    transition: all 0.3s ease;
+}
+
+.drop-zone.drag-active {
+    border-color: var(--secondary);
+    background-color: rgba(168, 85, 247, 0.1);
+}
+
+.drop-zone .icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+}
+
+.upload-btn {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    background-color: var(--primary);
+    color: var(--bg-dark);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.upload-btn:hover {
+    background-color: var(--secondary);
+}
+
+.file-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: var(--bg-card);
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    border: 1px solid rgba(6, 182, 212, 0.3);
+    transition: all 0.3s ease;
+}
+
+.file-item:hover {
+    border-color: rgba(168, 85, 247, 0.5);
+}
+
+.file-info {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.file-name {
+    margin: 0;
+}
+
+.file-size {
+    color: rgba(6, 182, 212, 0.6);
+    font-size: 0.875rem;
+    margin: 0;
+}
+
+.delete-btn {
+    background: none;
+    border: none;
+    color: #EF4444;
+    cursor: pointer;
+    padding: 0.5rem;
+    border-radius: 50%;
+    transition: all 0.3s ease;
+}
+
+.delete-btn:hover {
+    background-color: rgba(239, 68, 68, 0.1);
+}

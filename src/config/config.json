@@ -10,7 +10,6 @@
           "path": "/",
           "methods": ["GET", "POST"],
           "root": "static",
-          "default_page": "index.html",
           "directory_listing": true
         }
       ]
@@ -23,8 +22,9 @@
       "routes": [
         {
           "path": "/",
-          "methods": ["GET", "POST"],
-          "root": "static",
+          "methods": ["GET", "POST", "DELETE"],
+          "root": "example",
+          "default_page": "index.html",
           "directory_listing": false
         }
       ]

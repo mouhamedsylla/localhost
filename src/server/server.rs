@@ -12,11 +12,15 @@ use crate::server::host::Host;
 use crate::server::logger::{Logger, LogLevel};
 use crate::server::static_files::{ServerStaticFiles, FileStatus};
 use crate::http::status::HttpStatusCode;
+use crate::server::uploader::Uploader;
 use libc::{
     epoll_create1, epoll_ctl, epoll_event, epoll_wait, 
     EPOLLET, EPOLLIN, EPOLLHUP, EPOLLERR,
     EPOLL_CTL_ADD, EPOLL_CTL_DEL,
 };
+use serde_json::json;
+
+use super::uploader::{self, Handler};
 
 const EPOLL_EVENTS: u32 = (EPOLLIN | EPOLLET) as u32;
 const TIMEOUT_DURATION: Duration = Duration::from_secs(60);
@@ -35,6 +39,7 @@ pub struct Server {
     connections: HashMap<RawFd, Connection>,
     epoll_fd: RawFd,
     logger: Logger,
+    uploader: Option<Uploader>
 }
 
 impl From<std::io::Error> for ServerError {
@@ -44,7 +49,7 @@ impl From<std::io::Error> for ServerError {
 }
 
 impl Server {
-    pub fn new() -> Result<Self, ServerError> {
+    pub fn new(uploader: Option<Uploader>) -> Result<Self, ServerError> {
         let epoll_fd = Self::create_epoll()?;
         let logger = Logger::new(LogLevel::DEBUG);
 
@@ -53,6 +58,7 @@ impl Server {
             connections: HashMap::new(),
             epoll_fd,
             logger,
+            uploader
         })
     }
 
@@ -147,14 +153,31 @@ impl Server {
     fn handle_request(&mut self, client_fd: RawFd, host: Host) -> Result<(), ServerError> {
         let connection = self.connections.get_mut(&client_fd).unwrap();
         let mut should_close = false;
-
-        match connection.read_request().unwrap() {
-            Some(buffer) if !buffer.is_empty() => {
-                let request_str = String::from_utf8_lossy(&buffer);
-                if let Some(request) = crate::http::request::parse_request(&request_str) {
-
-                    if let Some(route) = host.get_route(&request.uri.clone()) {
-                        if request.method == HttpMethod::GET {
+    
+        match connection.read_request()? {
+            request => {
+                if let Some(route) = host.get_route(&request.uri) {
+                    match request.method {
+                        HttpMethod::GET => {
+                            // Traitement GET...
+                            if request.uri == "/api/files" {
+                                if let Some(uploader) = self.uploader.as_mut() {
+                                    let response = uploader.serve_http(&request)?;
+                                    connection.send_response(response.clone().to_string());
+                                    let message = format!("GET - {} - {}", &request.uri, response.status_code.as_str());
+                                    self.logger.info(&message, "Server");
+                                } else {
+                                    let response_builder = ResponseBuilder::new();
+                                    let response = response_builder
+                                        .status_code(HttpStatusCode::ServiceUnavailable)
+                                        .header(Header::from_str("content-type", "application/json"))
+                                        .body(Body::Json(json!({"message": "Service temporarily unavailable. Please try again later"})))
+                                        .build();
+                                    connection.send_response(response.clone().to_string());
+                                    let message = format!("GET - {} - {}", &request.uri, response.status_code.as_str());
+                                    self.logger.info(&message, "Server");
+                                }
+                            } else
                             if let Some(cgi_handler) = route.cgi_handler.clone() {
                                 let script = Path::new(&cgi_handler.script_dir);
                                 let response = cgi_handler.handle_request(&request, &script)?;
@@ -167,23 +190,46 @@ impl Server {
                                 let message = format!("GET - {} - {}", &request.uri, response.status_code.as_str());
                                 self.logger.info(&message, "Server");
                             }
+                        },
+                        HttpMethod::POST => {
+                            // Traitement POST...
+                            if request.uri == "/api/upload" {
+                                if let Some(uploader) = self.uploader.as_mut() {
+                                    let response = uploader.serve_http(&request)?;
+                                   // println!("RESPONSE: {:#?}", response.clone().to_string());
+                                    connection.send_response(response.clone().to_string());
+                                    let message = format!("GET - {} - {}", &request.uri, response.status_code.as_str());
+                                    self.logger.info(&message, "Server");
+                                } else {
+                                    let response_builder = ResponseBuilder::new();
+                                    let response = response_builder
+                                        .status_code(HttpStatusCode::ServiceUnavailable)
+                                        .header(Header::from_str("content-type", "application/json"))
+                                        .body(Body::Json(json!({"message": "Service temporarily unavailable. Please try again later"})))
+                                        .build();
+                                    connection.send_response(response.clone().to_string());
+                                    let message = format!("GET - {} - {}", &request.uri, response.status_code.as_str());
+                                    self.logger.info(&message, "Server");
+                                }
+                            }   
+                        },
+                        // Autres méthodes...
+                        _ => {
+                            // Autres méthodes...
                         }
                     }
-                    connection.start_time = Instant::now();
-                    connection.keep_alive = want_keep_alive(request);
-                    should_close = connection.keep_alive;
                 }
+                connection.start_time = Instant::now();
+                connection.keep_alive = want_keep_alive(request);
+                should_close = !connection.keep_alive;
             },
-            Some(_) => (),
-            None => {
-                should_close = true;
-            }
+            //None => should_close = true
         }
-
-        if !should_close {
+    
+        if should_close {
             self.close_connection(client_fd)?;
         }
-
+    
         Ok(())
     }
 
@@ -304,7 +350,7 @@ fn handle_static_file_request(static_files: &mut ServerStaticFiles, request: Req
                Header::from_str("connection", "close")
            };
 
-           let body = Body::from_mime(&mime_str, content);
+           let body = Body::from_mime(&mime_str, content, None);
            let response_builder = ResponseBuilder::new();
            
            // set status based on file_status

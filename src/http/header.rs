@@ -1,5 +1,7 @@
+use std::hash::Hash;
 use std::time::SystemTime;
 use std::fmt;
+use std::collections::HashMap;
 
 // ============= Main Structures =============
 #[derive(Debug, Clone)]
@@ -12,6 +14,16 @@ pub struct Header {
 pub struct HeaderValue {
     pub value: String,
     pub parsed_value: Option<HeaderParsedValue>,
+}
+
+pub struct ParsedContentType {
+    pub mime: String,
+    pub params: HashMap<String, String>,
+}
+
+pub struct ParsedContentDisposition {
+    pub disposition: String,
+    pub params: HashMap<String, String>,
 }
 
 // ============= Header Type Enums =============
@@ -32,7 +44,8 @@ pub enum HeaderName {
     // Content headers
     ContentType,
     ContentLength,
-    
+    ContentDisposition,
+
     // Connection headers
     Connection,
     TransferEncoding,
@@ -116,6 +129,7 @@ impl Header {
     }
 
 
+
 }
 
 // ============= HeaderName Implementations =============
@@ -124,6 +138,7 @@ impl HeaderName {
         match name.to_lowercase().as_str() {
             "content-type" => HeaderName::ContentType,
             "content-length" => HeaderName::ContentLength,
+            "content-disposition" => HeaderName::ContentDisposition,
             "transfer-encoding" => HeaderName::TransferEncoding,
             "connection" => HeaderName::Connection,
             "date" => HeaderName::Date,
@@ -145,6 +160,7 @@ impl HeaderName {
         match self {
             HeaderName::ContentType => "Content-Type",
             HeaderName::ContentLength => "Content-Length",
+            HeaderName::ContentDisposition => "Content-Disposition",
             HeaderName::TransferEncoding => "Transfer-Encoding",
             HeaderName::Connection => "Connection",
             HeaderName::Date => "Date",
@@ -176,6 +192,47 @@ impl ContentType {
             _ => ContentType::Raw,
         }
     }
+
+    pub fn parse_content_type(header: &Header) -> Option<ParsedContentType> {
+        if header.name != HeaderName::ContentType {
+            return None;
+        }
+
+        let parts = header.value.value.split(';').map(|part| part.trim()).collect::<Vec<&str>>();
+        let mime = parts[0].to_string();
+        let mut params = HashMap::new();
+        
+        for part in parts[1..].iter() {
+            let mut parts = part.split('=');
+            let key = parts.next().unwrap().to_string();
+            let value = parts.next().unwrap_or("").to_string();
+            params.insert(key, value);
+        }
+
+        Some(ParsedContentType { mime, params })
+    }
+}
+
+// ============= Content-Disposition Implementation =============
+
+impl ParsedContentDisposition {
+    pub fn parse_content_disposition(header: &Header) -> Option<ParsedContentDisposition> {
+        if header.name != HeaderName::ContentDisposition {
+            return None;
+        }
+
+        let parts = header.value.value.split(';').map(|part| part.trim()).collect::<Vec<&str>>();
+        let disposition = parts[0].to_string();
+        let mut params = HashMap::new();
+        parts[1..].iter().for_each(|part| {
+            let mut parts = part.split('=');
+            let key = parts.next().unwrap().to_string();
+            let value = parts.next().unwrap_or("").to_string();
+            params.insert(key, value);
+        }); 
+
+        Some(ParsedContentDisposition { disposition, params })
+    }
 }
 
 // ============= HeaderParsedValue Implementations =============
@@ -192,6 +249,7 @@ impl HeaderParsedValue {
                     HeaderParsedValue::Raw
                 }
             }
+            
             HeaderName::TransferEncoding => match value.to_lowercase().as_str() {
                 "chunked" => HeaderParsedValue::TransferEncoding(TransferEncoding::Chunked),
                 "compress" => HeaderParsedValue::TransferEncoding(TransferEncoding::Compress),
