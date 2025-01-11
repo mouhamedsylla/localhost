@@ -9,15 +9,15 @@ use std::io::Error;
 use std::path::Path;
 
 #[derive(Debug, Clone)]
-pub struct CGIHandler {
+pub struct CGIConfig {
     interpreter: String,
     pub script_dir: String,
     allowed_extensions: Vec<String>
 }
 
-impl CGIHandler {
+impl CGIConfig {
     pub fn new(script_dir: String) -> Self {
-        CGIHandler {
+        CGIConfig {
             interpreter: String::from("/usr/bin/python3"),
             script_dir,
             allowed_extensions: vec!["py".to_string()]

@@ -13,26 +13,28 @@ use crate::server::logger::{Logger, LogLevel};
 use crate::server::static_files::{ServerStaticFiles, FileStatus};
 use crate::http::status::HttpStatusCode;
 use crate::server::uploader::Uploader;
+use crate::server::errors::ServerError;
+use crate::server::route::Route;
+use crate::server::handlers::handlers::{
+    Handler,
+    StaticFileHandler,
+    CGIHandler
+};
 use libc::{
     epoll_create1, epoll_ctl, epoll_event, epoll_wait, 
     EPOLLET, EPOLLIN, EPOLLHUP, EPOLLERR,
     EPOLL_CTL_ADD, EPOLL_CTL_DEL,
 };
+use multipart::server::nickel::nickel::StaticFilesHandler;
 use serde_json::json;
 
-use super::uploader::{self, Handler};
+use super::handlers::handlers::FileAPIHandler;
+use super::*;
+use handlers;
 
 const EPOLL_EVENTS: u32 = (EPOLLIN | EPOLLET) as u32;
 const TIMEOUT_DURATION: Duration = Duration::from_secs(60);
 const MAX_EVENTS: usize = 1024;
-
-#[derive(Debug)]
-pub enum ServerError {
-    IoError(std::io::Error),
-    EpollError(&'static str),
-    ConnectionError(String),
-}
-
 #[derive(Debug)]
 pub struct Server {
     hosts: Vec<Host>,
@@ -40,12 +42,6 @@ pub struct Server {
     epoll_fd: RawFd,
     logger: Logger,
     uploader: Option<Uploader>
-}
-
-impl From<std::io::Error> for ServerError {
-    fn from(error: std::io::Error) -> Self {
-        ServerError::IoError(error)
-    }
 }
 
 impl Server {
@@ -153,69 +149,29 @@ impl Server {
     fn handle_request(&mut self, client_fd: RawFd, host: Host) -> Result<(), ServerError> {
         let connection = self.connections.get_mut(&client_fd).unwrap();
         let mut should_close = false;
-    
-        match connection.read_request()? {
-            request => {
+
+        match connection.read_request() {
+            Ok(request) => {
                 if let Some(route) = host.get_route(&request.uri) {
-                    match request.method {
-                        HttpMethod::GET => {
-                            // Traitement GET...
-                            if request.uri == "/api/files" {
-                                if let Some(uploader) = self.uploader.as_mut() {
-                                    let response = uploader.serve_http(&request)?;
-                                    connection.send_response(response.clone().to_string());
-                                    let message = format!("GET - {} - {}", &request.uri, response.status_code.as_str());
-                                    self.logger.info(&message, "Server");
-                                } else {
-                                    let response_builder = ResponseBuilder::new();
-                                    let response = response_builder
-                                        .status_code(HttpStatusCode::ServiceUnavailable)
-                                        .header(Header::from_str("content-type", "application/json"))
-                                        .body(Body::Json(json!({"message": "Service temporarily unavailable. Please try again later"})))
-                                        .build();
-                                    connection.send_response(response.clone().to_string());
-                                    let message = format!("GET - {} - {}", &request.uri, response.status_code.as_str());
-                                    self.logger.info(&message, "Server");
-                                }
-                            } else
-                            if let Some(cgi_handler) = route.cgi_handler.clone() {
-                                let script = Path::new(&cgi_handler.script_dir);
-                                let response = cgi_handler.handle_request(&request, &script)?;
-                                connection.send_response(response.clone().to_string())?;
-                                let message = format!("GET - {} - {}", &request.uri, response.status_code.as_str());
-                                self.logger.info(&message, "Server");
-                            } else                            
-                                if let Some(mut static_files) = route.static_files.clone() {
-                                let response = handle_static_file_request(&mut static_files, request.clone(), connection)?;
-                                let message = format!("GET - {} - {}", &request.uri, response.status_code.as_str());
-                                self.logger.info(&message, "Server");
-                            }
+                    match host.route_request(&request, route, self.uploader.clone()) {
+                        Ok(mut response) => {
+                            // Ajouter les headers CORS
+                            response.headers.extend(vec![
+                                Header::from_str("Access-Control-Allow-Origin", "*"),
+                                Header::from_str("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS"),
+                                Header::from_str("Access-Control-Allow-Headers", "Content-Type"),
+                            ]);
+
+                            connection.send_response(response.clone().to_string());
+                            let message = format!("{} - {} - {}", 
+                                request.method,
+                                &request.uri, 
+                                response.status_code.as_str()
+                            );
+                            self.logger.info(&message, "Server");
                         },
-                        HttpMethod::POST => {
-                            // Traitement POST...
-                            if request.uri == "/api/upload" {
-                                if let Some(uploader) = self.uploader.as_mut() {
-                                    let response = uploader.serve_http(&request)?;
-                                   // println!("RESPONSE: {:#?}", response.clone().to_string());
-                                    connection.send_response(response.clone().to_string());
-                                    let message = format!("GET - {} - {}", &request.uri, response.status_code.as_str());
-                                    self.logger.info(&message, "Server");
-                                } else {
-                                    let response_builder = ResponseBuilder::new();
-                                    let response = response_builder
-                                        .status_code(HttpStatusCode::ServiceUnavailable)
-                                        .header(Header::from_str("content-type", "application/json"))
-                                        .body(Body::Json(json!({"message": "Service temporarily unavailable. Please try again later"})))
-                                        .build();
-                                    connection.send_response(response.clone().to_string());
-                                    let message = format!("GET - {} - {}", &request.uri, response.status_code.as_str());
-                                    self.logger.info(&message, "Server");
-                                }
-                            }   
-                        },
-                        // Autres méthodes...
-                        _ => {
-                            // Autres méthodes...
+                        Err(error) => {
+                            self.logger.error(&error.to_string(), "Server");
                         }
                     }
                 }
@@ -223,15 +179,16 @@ impl Server {
                 connection.keep_alive = want_keep_alive(request);
                 should_close = !connection.keep_alive;
             },
-            //None => should_close = true
+            Err(error) => should_close = true
         }
-    
+
         if should_close {
             self.close_connection(client_fd)?;
         }
-    
+
         Ok(())
     }
+
 
     fn close_connection(&mut self, client_fd: RawFd) -> Result<(), ServerError> {
         unsafe {
@@ -332,63 +289,6 @@ fn want_keep_alive(request: Request) -> bool {
         Some(header) => header.value.value.to_lowercase() == "keep-alive",
         None => true
     }
-}
-
-fn handle_static_file_request(static_files: &mut ServerStaticFiles, request: Request, connection: &mut Connection)
--> Result<Response, ServerError> 
-{
-   match static_files.serve_static(&request.uri) {
-       Ok((content, mime, file_status)) => {
-           let mime_str = mime.map_or_else(|| "text/plain".to_string(), |m| m.to_string());
-           let content_type = Header::from_mime(&mime_str);
-
-           let keep_alive = if connection.keep_alive {
-               connection.keep_alive = true;
-               Header::from_str("connection", "keep-alive")
-           } else {
-                //connection.keep_alive = false;
-               Header::from_str("connection", "close")
-           };
-
-           let body = Body::from_mime(&mime_str, content, None);
-           let response_builder = ResponseBuilder::new();
-           
-           // set status based on file_status
-
-
-           match body {
-               Ok(body) => {
-                   let content_length = Header::from_str("content-length", &body.body_len().to_string());
-                   let status_code = if file_status == FileStatus::NotFound {
-                       HttpStatusCode::NotFound
-                   } else {
-                        HttpStatusCode::Ok
-                   };
-                   let response = response_builder.body(body)
-                    .status_code(status_code)
-                    .header(content_length)
-                    .header(content_type)
-                    .header(keep_alive)
-                    .build();
-                   connection.send_response(response.clone().to_string())?;
-                   return Ok(response);
-               },
-               Err(e) => {
-                   let body = Body::text(&e.to_string());
-                   let content_length = Header::from_str("content-length", &body.body_len().to_string());
-                   let response = response_builder
-                        .body(body)
-                        .header(content_length)
-                        .header(Header::from_mime("text/plain"))
-                        .header(keep_alive)                     
-                        .build();
-                   connection.send_response(response.clone().to_string())?;
-                     return Ok(response);
-               }
-           };
-       },
-       Err(e) => Err(ServerError::ConnectionError(format!("Static file error: {}", e))),
-   }
 }
 
 /// Host lookup implementation

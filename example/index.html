@@ -4,26 +4,60 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CyberVault</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>CyberVault</h1>
+            <h1>FileExplorer</h1>
             <p>Système de Gestion de Fichiers Futuriste</p>
         </header>
 
         <div class="drop-zone" id="dropZone">
-            <div class="icon">📁</div>
-            <p>Glissez un fichier ou</p>
+            <i class="fas fa-cloud-upload-alt icon"></i>
+            <p>Glissez un ou plusieurs fichiers ou</p>
             <label class="upload-btn">
-                Parcourir
-                <input type="file" id="fileInput" hidden>
+                <i class="fas fa-folder-open"></i> Parcourir
+                <input type="file" id="fileInput" multiple hidden>
             </label>
         </div>
 
-        <div class="files-list" id="filesList">
-            <!-- Les fichiers seront ajoutés ici -->
+        <div class="controls">
+            <div class="search-box">
+                <i class="fas fa-search search-icon"></i>
+                <input type="text" id="searchInput" placeholder="Rechercher des fichiers...">
+            </div>
+            <div class="sort-box">
+                <select id="sortSelect">
+                    <option value="date-desc">Plus récent</option>
+                    <option value="date-asc">Plus ancien</option>
+                    <option value="name-asc">Nom (A-Z)</option>
+                    <option value="name-desc">Nom (Z-A)</option>
+                    <option value="size-desc">Taille (↓)</option>
+                    <option value="size-asc">Taille (↑)</option>
+                </select>
+            </div>
+        </div>
+
+        <div id="fileStats" class="file-stats"></div>
+
+        <div class="files-container">
+            <div class="files-list" id="filesList">
+                <!-- Les fichiers seront ajoutés ici -->
+            </div>
+        </div>
+
+        <div class="pagination" id="pagination">
+            <button class="pagination-btn" id="prevBtn" disabled>
+                <i class="fas fa-chevron-left"></i> Précédent
+            </button>
+            <span class="pagination-info">
+                Page <span id="currentPage">1</span> sur <span id="totalPages">1</span>
+            </span>
+            <button class="pagination-btn" id="nextBtn" disabled>
+                Suivant <i class="fas fa-chevron-right"></i>
+            </button>
         </div>
     </div>
     <script src="script.js"></script>

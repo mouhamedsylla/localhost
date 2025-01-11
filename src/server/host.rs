@@ -1,7 +1,22 @@
 use std::net::{TcpListener, TcpStream};
 use std::os::unix::io::{AsRawFd, RawFd};
 use crate::server::route::Route;
-
+use crate::server::errors::ServerError;
+use crate::server::uploader::Uploader;
+use serde_json::json;
+use crate::server::handlers::handlers::{
+    Handler,
+    StaticFileHandler,
+    FileAPIHandler,
+    CGIHandler
+};
+use crate::http::{
+    body::Body,
+    request::{Request, HttpMethod},
+    response::{Response, ResponseBuilder},
+    status::HttpStatusCode,
+    header::Header
+};
 
 #[derive(Debug)]
 pub struct HostListener {
@@ -102,4 +117,63 @@ impl Host {
         })
     }
 
+    pub fn route_request(&self, request: &Request, route: &Route, uploader: Option<Uploader>) -> Result<Response, ServerError> {
+        match (&request.method, &request.uri) {
+            // Handle file API endpoints with FileApiHandler
+            (_, uri) if uri.starts_with("/api") => {
+                if let Some(uploader) = uploader {
+                    // Create and use the file API handler
+                    let handler_result = FileAPIHandler::new(uploader.clone());
+                    match handler_result {
+                        Ok(mut handler) => {
+                            handler.serve_http(request)
+                            .map_err(|e| ServerError::ConnectionError(e.to_string()))
+                        },
+                        Err(err) => {
+                            return Err(ServerError::ConnectionError("not available service".to_string()));
+                        }
+                    }
+                } else {
+                    // Return service unavailable if uploader is not configured
+                    Ok(ResponseBuilder::new()
+                        .status_code(HttpStatusCode::ServiceUnavailable)
+                        .header(Header::from_str("content-type", "application/json"))
+                        .body(Body::Json(json!({
+                            "message": "File upload service is not available"
+                        })))
+                        .build())
+                }
+            },
+
+            //Handle GET requests with appropriate handler
+            (HttpMethod::GET, _) => {
+                if let Some(static_files) = &route.static_files {
+                    // Handle static file requests
+                    let mut handler = StaticFileHandler { static_files: static_files.clone() };
+                    handler.serve_http(request)
+                        .map_err(|e| ServerError::ConnectionError(e.to_string()))
+                } else if let Some(cgi_config) = &route.cgi_config {
+                    // Handle CGI script requests
+                    let mut handler = CGIHandler { 
+                        cgi_config: cgi_config.clone()
+                    };
+                    handler.serve_http(request)
+                        .map_err(|e| ServerError::ConnectionError(e.to_string()))
+                } else {
+                    // Return not found if no handler matches
+                    Ok(ResponseBuilder::new()
+                        .status_code(HttpStatusCode::NotFound)
+                        .body(Body::Text("Not Found".to_string()))
+                        .build())
+                }
+            },
+            // Handle unsupported HTTP methods
+            _ => Ok(ResponseBuilder::new()
+            .status_code(HttpStatusCode::MethodNotAllowed)
+            .body(Body::Text("Method Not Allowed".to_string()))
+            .build())    
+        }
+    }
+
 }
+

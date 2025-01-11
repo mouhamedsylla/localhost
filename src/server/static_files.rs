@@ -44,17 +44,6 @@ impl ServerStaticFiles {
             ));
         }
 
-        // Validate index file if specified
-
-        // if !index.is_empty() {
-        //     if !directory.join(&index).exists() {
-        //         return Err(io::Error::new(
-        //             io::ErrorKind::NotFound,
-        //             "Index file not found",
-        //         ));
-        //     }
-        // }
-
         // Create default directory if missing
         let default_dir = directory.join(".default");
         if !default_dir.exists() {
@@ -177,7 +166,6 @@ impl ServerStaticFiles {
 
         // Generate data for current directory
         let current_dir_data = self.generate_directory_data(path)?;
-        println!("current data dir: {:#?}", current_dir_data);
         structure.insert(
             current_dir_data["path"].as_str().unwrap_or("/").to_string(),
             current_dir_data,

@@ -1,46 +1,5 @@
 // Generated directory structure
 export const directoryData = {
-  "/": {
-    "items": [
-      {
-        "name": ".default",
-        "path": "/.default",
-        "size": 4096,
-        "type": "directory"
-      },
-      {
-        "name": "home",
-        "path": "/home",
-        "size": 4096,
-        "type": "directory"
-      },
-      {
-        "name": "test",
-        "path": "/test",
-        "size": 4096,
-        "type": "directory"
-      },
-      {
-        "name": "test.txt",
-        "path": "/test.txt",
-        "size": 0,
-        "type": "file"
-      },
-      {
-        "name": "error",
-        "path": "/error",
-        "size": 4096,
-        "type": "directory"
-      },
-      {
-        "name": "cgi-bin",
-        "path": "/cgi-bin",
-        "size": 4096,
-        "type": "directory"
-      }
-    ],
-    "path": "/cgi-bin"
-  },
   "/error": {
     "items": [
       {
@@ -62,6 +21,10 @@ export const directoryData = {
       }
     ],
     "path": "/cgi-bin"
+  },
+  "/test": {
+    "items": [],
+    "path": "/test"
   },
   "/.default": {
     "items": [
@@ -98,9 +61,40 @@ export const directoryData = {
     ],
     "path": "/.default"
   },
-  "/test": {
-    "items": [],
-    "path": "/test"
+  "/": {
+    "items": [
+      {
+        "name": ".default",
+        "path": "/.default",
+        "size": 4096,
+        "type": "directory"
+      },
+      {
+        "name": "home",
+        "path": "/home",
+        "size": 4096,
+        "type": "directory"
+      },
+      {
+        "name": "test",
+        "path": "/test",
+        "size": 4096,
+        "type": "directory"
+      },
+      {
+        "name": "error",
+        "path": "/error",
+        "size": 4096,
+        "type": "directory"
+      },
+      {
+        "name": "cgi-bin",
+        "path": "/cgi-bin",
+        "size": 4096,
+        "type": "directory"
+      }
+    ],
+    "path": "/"
   },
   "/home": {
     "items": [

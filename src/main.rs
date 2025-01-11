@@ -3,23 +3,21 @@
 mod http;
 mod server;
 mod config;
-mod cgi;
 
 use server::server::Server;
-use server::server::ServerError;
+use server::errors::ServerError;
 use crate::server::host::Host;
 use crate::server::static_files::ServerStaticFiles;
-use crate::cgi::handler::CGIHandler;
 use config::config::load_config;
 use std::path::Path;
 use std::path::PathBuf;
-use crate::server::route::Route;
 use crate::http::request::HttpMethod;
 use crate::server::uploader::Uploader;
+use crate::server::route::Route;
 
 
 fn main() -> Result<(), ServerError> {
-    let uploader = Uploader::new(Path::new("example/upload"));
+    let uploader = Uploader::new(Path::new("example/upload").to_path_buf());
 
     let mut servers = Server::new(Some(uploader)).unwrap();
     
@@ -36,14 +34,15 @@ fn main() -> Result<(), ServerError> {
             let static_files = ServerStaticFiles::new(
                 PathBuf::from(r.root), r.default_page, r.directory_listing, host_config.error_pages.clone()).unwrap();
 
-            let cgi_handler = 
-                if let Some(cgi_script) = r.cgi_script {
-                    Some(CGIHandler::new(cgi_script))
-                } else {
-                    None
-                };
+            // let cgi_handler = 
+            //     if let Some(cgi_script) = r.cgi_script {
+            //         Some(CGIConfig::new(cgi_script))
+            //     } else {
+            //         None
+            //    };
+            let cgi_config = None;
 
-            routes.push(Route { path: r.path, methods , static_files: Some(static_files), cgi_handler });
+            routes.push(Route { path: r.path, methods , static_files: Some(static_files), cgi_config });
         }
 
         let host = Host::new(
