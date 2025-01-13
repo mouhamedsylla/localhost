@@ -105,6 +105,8 @@ impl MultipartForm {
                         }
                     }
                 }
+            } else {
+                println!("Failed to parse part");
             }
         }
     }
@@ -152,16 +154,21 @@ impl Body {
     // Content-Type based creation
     pub fn from_mime(mime: &str, data: BinaryData, boundary: Option<&str>) -> Result<Body, BodyError> {
         match mime.to_lowercase().as_str() {
-            "text/plain" | "text/html" | "text/css" | "text/javascript" => {
+            // Texte
+            "text/plain" | "text/html" | "text/css" | "text/javascript" | "text/csv" => {
                 let text = std::str::from_utf8(&data)
                     .map_err(|_| BodyError::InvalidUtf8(mime.to_string()))?;
                 Ok(Body::text(text))
             }
+
+            // JSON
             "application/json" => {
                 let json = serde_json::from_slice(&data)
                     .map_err(|e| BodyError::InvalidJson(e.to_string()))?;
                 Ok(Body::json(json))
             }
+
+            // Form data
             "application/x-www-form-urlencoded" => {
                 let form_str = std::str::from_utf8(&data)
                     .map_err(|_| BodyError::InvalidUtf8("form data".to_string()))?;
@@ -169,7 +176,10 @@ impl Body {
                 form.parse_str(form_str)?;
                 Ok(Body::form(form))
             }
+
+            // Multipart form data
             "multipart/form-data" => {
+                println!("Data length: {}", data.len());
                 if let Some(boundary) = boundary {
                     let mut form = MultipartForm::new();
                     form.set_data(data, boundary);
@@ -178,12 +188,48 @@ impl Body {
                     Err(BodyError::MultipartError("Missing boundary".to_string()))
                 }
             }
-            "image/jpeg" | "image/png" | "image/gif" | "image/webp" | "image/svg+xml" => {
-                Ok(Body::Binary(data))
-            }    
-            "application/octet-stream" => Ok(Body::binary(data)),
-            _ => Err(BodyError::UnsupportedMimeType(mime.to_string())),
 
+            // Images
+            mime if mime.starts_with("image/") => {
+                println!("Image length: {}", data.len());
+                Ok(Body::Binary(data))
+            }
+
+            // Documents
+            "application/pdf" |
+            "application/msword" |
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document" |
+            "application/vnd.ms-excel" |
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" |
+            "application/vnd.ms-powerpoint" |
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation" => {
+                Ok(Body::Binary(data))
+            }
+
+            // Audio
+            mime if mime.starts_with("audio/") => {
+                Ok(Body::Binary(data))
+            }
+
+            // Vidéo
+            mime if mime.starts_with("video/") => {
+                Ok(Body::Binary(data))
+            }
+
+            // Archives
+            "application/zip" |
+            "application/x-rar-compressed" |
+            "application/x-7z-compressed" |
+            "application/x-tar" |
+            "application/gzip" => {
+                Ok(Body::Binary(data))
+            }
+
+            // Fallback pour les données binaires non identifiées
+            "application/octet-stream" => Ok(Body::Binary(data)),
+
+            // Type MIME non supporté
+            _ => Err(BodyError::UnsupportedMimeType(mime.to_string())),
         }
     }
 
@@ -317,13 +363,16 @@ fn split_multipart(data: &[u8], boundary: &[u8]) -> Vec<Vec<u8>> {
         }
         current_pos += pos + boundary.len();
     }
+
     parts
 }
+
 
 fn parse_part(part: &[u8]) -> Option<(Vec<Header>, Vec<u8>)> {
     let mut headers = Vec::new();
     let mut pos = 0;
-    
+    let mut part_data = Vec::new();
+
     while let Some(line_end) = find_subsequence(&part[pos..], b"\r\n") {
         if line_end == 2 {
             pos += 4;
@@ -334,11 +383,13 @@ fn parse_part(part: &[u8]) -> Option<(Vec<Header>, Vec<u8>)> {
             if let Some((name, value)) = line.split_once(':') {
                 headers.push(Header::from_str(name, value));
             }
+        } else {
+            part_data.extend_from_slice(&part[pos..pos + line_end]);
         }
         pos += line_end + 2;
     }
-    
-    Some((headers, part[pos..].to_vec()))
+
+    Some((headers, part_data))
 }
 
 fn find_subsequence(haystack: &[u8], needle: &[u8]) -> Option<usize> {

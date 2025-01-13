@@ -265,15 +265,7 @@ pub mod handlers {
                     })).collect::<Vec<_>>()
                 });
 
-                let body = Body::json(files_json);
-                Ok(Response::new(
-                    HttpStatusCode::Ok,
-                    vec![
-                        Header::from_str("content-type", "application/json"),
-                        Header::from_str("content-length", &body.body_len().to_string()),
-                    ],
-                    Some(body),
-                ))
+                Ok(Response::response_with_json(files_json, HttpStatusCode::Ok))
             }
 
             fn handle_post(&mut self, request: &Request) -> Result<Response, io::Error> {
@@ -286,6 +278,7 @@ pub mod handlers {
                         let mut uploaded_files = Vec::new();
 
                         for (field_name, file) in &form.files {
+                            println!("file data len: {}", file.data.len());
                             // Validate file
                             if let Some(error_response) =
                                 self.validate_upload(&file.content_type, file.data.len())
@@ -312,28 +305,18 @@ pub mod handlers {
                             }
                         }
 
-                        let body = Body::json(json!({
+                        let body = json!({
                             "message": "Files uploaded successfully",
                             "files": uploaded_files
-                        }));
-
-                        Ok(Response::new(
-                            HttpStatusCode::Ok,
-                            vec![
-                                Header::from_str("content-type", "application/json"),
-                                Header::from_str("content-length", &body.body_len().to_string()),
-                            ],
-                            Some(body),
-                        ))
+                        });
+                        Ok(Response::response_with_json(body, HttpStatusCode::Ok))
                     }
                     _ => Ok(self.bad_request_response("Invalid request format")),
                 }
             }
 
             fn handle_delete(&mut self, request: &Request) -> Result<Response, io::Error> {
-                println!("URI {:?}", request.uri);
                 if !request.uri.starts_with("/api/files/") {
-                    println!("Ok je fous de toi mếme si ça commence par /api/files/ -> : {:?}", request.uri);
                     return Ok(self.not_found_response());
                 }
 
@@ -348,18 +331,12 @@ pub mod handlers {
 
                 match self.uploader.delete_file(file_id) {
                     Ok(file) => {
-                        let body = Body::json(json!({
+                        let body = json!({
                             "message": "File deleted successfully",
                             "id": file.id
-                        }));
-                        Ok(Response::new(
-                            HttpStatusCode::Ok,
-                            vec![
-                                Header::from_str("content-type", "application/json"),
-                                Header::from_str("content-length", &body.body_len().to_string()),
-                            ],
-                            Some(body),
-                        ))
+                        });
+
+                        Ok(Response::response_with_json(body, HttpStatusCode::Ok))
                     }
                     Err(e) => {
                         if e.kind() == io::ErrorKind::NotFound {
@@ -407,15 +384,7 @@ pub mod handlers {
             }
 
             fn error_response(&self, status: HttpStatusCode, message: &str) -> Response {
-                let body = Body::json(json!({ "error": message }));
-                Response::new(
-                    status,
-                    vec![
-                        Header::from_str("content-type", "application/json"),
-                        Header::from_str("content-length", &body.body_len().to_string()),
-                    ],
-                    Some(body),
-                )
+                Response::response_with_json(json!({ "error": message }), status)
             }
         }
     }

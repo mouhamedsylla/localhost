@@ -14,6 +14,7 @@ use std::path::PathBuf;
 use crate::http::request::HttpMethod;
 use crate::server::uploader::Uploader;
 use crate::server::route::Route;
+use crate::server::cgi::CGIConfig;
 
 
 fn main() -> Result<(), ServerError> {
@@ -34,13 +35,15 @@ fn main() -> Result<(), ServerError> {
             let static_files = ServerStaticFiles::new(
                 PathBuf::from(r.root), r.default_page, r.directory_listing, host_config.error_pages.clone()).unwrap();
 
-            // let cgi_handler = 
-            //     if let Some(cgi_script) = r.cgi_script {
-            //         Some(CGIConfig::new(cgi_script))
-            //     } else {
-            //         None
-            //    };
-            let cgi_config = None;
+            let cgi_config = 
+                if let Some(cgi_script) = r.cgi_script {
+                    Some(CGIConfig::new(cgi_script))
+                } else {
+                    None
+               };
+            //let cgi_config = None;
+
+            println!("CGI config: {:#?}", cgi_config);
 
             routes.push(Route { path: r.path, methods , static_files: Some(static_files), cgi_config });
         }

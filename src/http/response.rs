@@ -79,39 +79,34 @@ impl Response {
         )
     }
 
-    pub fn response_with_json(data: serde_json::Value) -> Response {
-        let mut headers = Vec::new();
-        headers.push(Header {
-            name: HeaderName::ContentType,
-            value: HeaderValue {
-                value: "application/json".to_string(),
-                parsed_value: Some(HeaderParsedValue::ContentType(ContentType::ApplicationJson)),
-            },
-        });
+    pub fn response_with_json(data: serde_json::Value, status: HttpStatusCode) -> Response {
+        let body = Body::json(data);
+
+        let mut headers = vec![
+            Header::from_str("content-type", "application/json"),
+            Header::from_str("content-length", &body.body_len().to_string())
+        ];
 
         Response {
             version: "HTTP/1.1".to_string(),
-            status_code: HttpStatusCode::Ok,
+            status_code: status,
             headers,
-            body: Some(Body::json(data))
+            body: Some(body)
         }
     }
 
-    pub fn response_with_html(data: &str) -> Response {
-        let mut headers = Vec::new();
-        headers.push(Header {
-            name: HeaderName::ContentType,
-            value: HeaderValue {
-                value: "text/html".to_string(),
-                parsed_value: Some(HeaderParsedValue::ContentType(ContentType::TextHtml))
-            }
-        });
+    pub fn response_with_html(data: &str, status: HttpStatusCode) -> Response {
+        let body = Body::text(data);
+        let mut headers = vec![
+            Header::from_str("content-type", "text/html"),
+            Header::from_str("content-length", &body.body_len().to_string())
+        ];
 
         Response { 
             version: "HTTP/1.1".to_string(),
-            status_code: HttpStatusCode::Ok,
+            status_code: status,
             headers, 
-            body: Some(Body::text(data))
+            body: Some(body)
         }
     }
 

@@ -1,5 +1,8 @@
 # Localhost
 
+
+
+
 ```mermaid
 stateDiagram-v2
     [*] --> EventLoop : Démarrage du serveur

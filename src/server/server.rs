@@ -2,39 +2,35 @@ use std::os::fd::AsRawFd;
 use std::path::Path;
 use std::time::{Instant, Duration};
 use std::{collections::HashMap, os::unix::io::RawFd};
-use crate::http::body::Body;
-use crate::http::header::{Header, HeaderName};
-use crate::http::request::Request;
-use crate::http::request::HttpMethod;
-use crate::http::response::{self, Response, ResponseBuilder};
-use crate::server::connection::Connection;
-use crate::server::host::Host;
-use crate::server::logger::{Logger, LogLevel};
-use crate::server::static_files::{ServerStaticFiles, FileStatus};
-use crate::http::status::HttpStatusCode;
-use crate::server::uploader::Uploader;
-use crate::server::errors::ServerError;
-use crate::server::route::Route;
-use crate::server::handlers::handlers::{
-    Handler,
-    StaticFileHandler,
-    CGIHandler
+use crate::http::{
+    body::Body,
+    status::HttpStatusCode,
+    header::{Header, HeaderName},
+    request::{Request, HttpMethod},
 };
+
+use crate::server::{
+    host::Host,
+    route::Route,
+    uploader::Uploader,
+    errors::ServerError,
+    connection::Connection,
+    logger::{Logger, LogLevel},
+};
+
 use libc::{
     epoll_create1, epoll_ctl, epoll_event, epoll_wait, 
     EPOLLET, EPOLLIN, EPOLLHUP, EPOLLERR,
     EPOLL_CTL_ADD, EPOLL_CTL_DEL,
 };
+
 use multipart::server::nickel::nickel::StaticFilesHandler;
 use serde_json::json;
-
-use super::handlers::handlers::FileAPIHandler;
-use super::*;
-use handlers;
 
 const EPOLL_EVENTS: u32 = (EPOLLIN | EPOLLET) as u32;
 const TIMEOUT_DURATION: Duration = Duration::from_secs(60);
 const MAX_EVENTS: usize = 1024;
+
 #[derive(Debug)]
 pub struct Server {
     hosts: Vec<Host>,
@@ -155,8 +151,14 @@ impl Server {
                 if let Some(route) = host.get_route(&request.uri) {
                     match host.route_request(&request, route, self.uploader.clone()) {
                         Ok(mut response) => {
-                            // Ajouter les headers CORS
+                            // Ajouter les headers CORS et Connection
+                            let connection_header = if connection.keep_alive && want_keep_alive(request.clone()) {
+                                "keep-alive"
+                            } else {
+                                "close"
+                            };
                             response.headers.extend(vec![
+                                Header::from_str("Connection", connection_header),
                                 Header::from_str("Access-Control-Allow-Origin", "*"),
                                 Header::from_str("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS"),
                                 Header::from_str("Access-Control-Allow-Headers", "Content-Type"),

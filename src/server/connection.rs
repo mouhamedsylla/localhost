@@ -17,7 +17,7 @@ pub struct Connection {
     pub host_name: String,
     pub keep_alive: bool,
     pub start_time: std::time::Instant,
-    buffer: Vec<u8>,  // Ajouter un buffer persistant
+    buffer: Vec<u8>,
 }
 
 impl Connection {
@@ -59,6 +59,8 @@ impl Connection {
                                 // Vérifier si on a reçu toutes les données
                                 if self.buffer.len() >= total_length {
                                     // Garder les données brutes pour le parsing
+                                    println!("Total length: {}", total_length);
+                                    println!("Buffer length: {}", self.buffer.len());
                                     let request_data = self.buffer[..total_length].to_vec();
                                     self.buffer.clear();
                                     

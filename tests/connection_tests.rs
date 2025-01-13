@@ -73,7 +73,7 @@ mod tests {
         assert!(response1.contains("HTTP/1.1 200"));
         
         // Attend le timeout
-        thread::sleep(Duration::from_secs(61));
+        thread::sleep(Duration::from_secs(31));
         
         // La connexion devrait être fermée
         let response2 = client.send_request("/style.css");
@@ -121,7 +121,7 @@ mod tests {
                             
                             // Réduit le nombre de requêtes par connexion
                             for j in 0..2 {  // Réduit de 5 à 2
-                                let response = client.send_request(&format!("/index{}.html", i));
+                                let response = client.send_request(&format!("/index.html"));
                                 if !response.contains("HTTP/1.1 200") {
                                     println!("Response received: {:?}", response);
                                     panic!("Invalid response for request {}", j);

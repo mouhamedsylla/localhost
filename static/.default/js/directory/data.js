@@ -1,30 +1,21 @@
 // Generated directory structure
 export const directoryData = {
-  "/error": {
+  "/home": {
     "items": [
       {
-        "name": "404.html",
-        "path": "/error/404.html",
-        "size": 234,
+        "name": "index.html",
+        "path": "/home/index.html",
+        "size": 229,
         "type": "file"
-      }
-    ],
-    "path": "/error"
-  },
-  "/cgi-bin": {
-    "items": [
+      },
       {
-        "name": "main.py",
-        "path": "/cgi-bin/main.py",
-        "size": 1798,
-        "type": "file"
+        "name": "another",
+        "path": "/home/another",
+        "size": 4096,
+        "type": "directory"
       }
     ],
-    "path": "/cgi-bin"
-  },
-  "/test": {
-    "items": [],
-    "path": "/test"
+    "path": "/home"
   },
   "/.default": {
     "items": [
@@ -96,21 +87,30 @@ export const directoryData = {
     ],
     "path": "/"
   },
-  "/home": {
+  "/test": {
+    "items": [],
+    "path": "/test"
+  },
+  "/cgi-bin": {
     "items": [
       {
-        "name": "index.html",
-        "path": "/home/index.html",
-        "size": 229,
+        "name": "main.py",
+        "path": "/cgi-bin/main.py",
+        "size": 1798,
         "type": "file"
-      },
-      {
-        "name": "another",
-        "path": "/home/another",
-        "size": 4096,
-        "type": "directory"
       }
     ],
-    "path": "/home"
+    "path": "/cgi-bin"
+  },
+  "/error": {
+    "items": [
+      {
+        "name": "404.html",
+        "path": "/error/404.html",
+        "size": 234,
+        "type": "file"
+      }
+    ],
+    "path": "/error"
   }
 };

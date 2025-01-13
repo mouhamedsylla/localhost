@@ -135,13 +135,10 @@ impl Host {
                     }
                 } else {
                     // Return service unavailable if uploader is not configured
-                    Ok(ResponseBuilder::new()
-                        .status_code(HttpStatusCode::ServiceUnavailable)
-                        .header(Header::from_str("content-type", "application/json"))
-                        .body(Body::Json(json!({
-                            "message": "File upload service is not available"
-                        })))
-                        .build())
+                    let body = json!({
+                        "message": "File upload service is not available"
+                    });
+                    Ok(Response::response_with_json(body, HttpStatusCode::ServiceUnavailable))
                 }
             },
 
