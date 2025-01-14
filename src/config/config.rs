@@ -39,7 +39,7 @@ pub struct Host {
     pub server_address: String,
     pub ports: Vec<String>,
     pub server_name: String,
-    pub routes: Vec<Route>,
+    pub routes: Option<Vec<Route>>,
     pub error_pages: Option<ErrorPages>,
     pub client_max_body_size: Option<String>,
 }
@@ -189,8 +189,10 @@ impl Host {
             }
         }
 
-        for route in &self.routes {
-            warnings.extend(route.validate());
+        if let Some(routes) = &self.routes {
+            for route in routes {
+                warnings.extend(route.validate());
+            }
         }
 
         if let Some(error_pages) = &self.error_pages {
@@ -245,7 +247,6 @@ impl ServerConfig {
                     true
                 },
                 Err(e) => {
-                    //validation_errors.push(e);
                     match e {
                         ConfigError::Critical(msg) => {
                             logger.error(&msg, MODULE);

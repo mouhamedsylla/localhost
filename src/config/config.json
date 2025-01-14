@@ -9,7 +9,7 @@
         {
           "path": "/",
           "methods": ["GET", "POST"],
-          "root": "stati",
+          "root": "static",
           "directory_listing": true,
           "cgi_script": "cgi-bin/main.py"
         }
