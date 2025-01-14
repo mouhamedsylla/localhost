@@ -118,6 +118,7 @@ impl Host {
     }
 
     pub fn route_request(&self, request: &Request, route: &Route, uploader: Option<Uploader>) -> Result<Response, ServerError> {
+       
         match (&request.method, &request.uri) {
             // Handle file API endpoints with FileApiHandler
             (_, uri) if uri.starts_with("/api") => {
@@ -158,17 +159,25 @@ impl Host {
                         .map_err(|e| ServerError::ConnectionError(e.to_string()))
                 } else {
                     // Return not found if no handler matches
+                    let body = Body::Text("Not Found".to_string());
                     Ok(ResponseBuilder::new()
                         .status_code(HttpStatusCode::NotFound)
-                        .body(Body::Text("Not Found".to_string()))
+                        .header(Header::from_str("Content-Type", "text/plain"))
+                        .header(Header::from_str("Content-Length", &body.body_len().to_string()))
+                        .body(body)
                         .build())
                 }
             },
             // Handle unsupported HTTP methods
-            _ => Ok(ResponseBuilder::new()
+            _ => {
+                let body = Body::Text("Method Not Allowed".to_string());
+                Ok(ResponseBuilder::new()
             .status_code(HttpStatusCode::MethodNotAllowed)
-            .body(Body::Text("Method Not Allowed".to_string()))
+            .header(Header::from_str("Content-Type", "text/plain"))
+            .header(Header::from_str("Content-Length", &body.body_len().to_string()))
+            .body(body)
             .build())    
+            }
         }
     }
 

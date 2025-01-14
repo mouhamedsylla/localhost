@@ -17,6 +17,10 @@ export const directoryData = {
     ],
     "path": "/home"
   },
+  "/test": {
+    "items": [],
+    "path": "/test"
+  },
   "/.default": {
     "items": [
       {
@@ -87,9 +91,16 @@ export const directoryData = {
     ],
     "path": "/"
   },
-  "/test": {
-    "items": [],
-    "path": "/test"
+  "/error": {
+    "items": [
+      {
+        "name": "404.html",
+        "path": "/error/404.html",
+        "size": 234,
+        "type": "file"
+      }
+    ],
+    "path": "/error"
   },
   "/cgi-bin": {
     "items": [
@@ -101,16 +112,5 @@ export const directoryData = {
       }
     ],
     "path": "/cgi-bin"
-  },
-  "/error": {
-    "items": [
-      {
-        "name": "404.html",
-        "path": "/error/404.html",
-        "size": 234,
-        "type": "file"
-      }
-    ],
-    "path": "/error"
   }
 };

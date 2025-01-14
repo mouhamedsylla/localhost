@@ -3,10 +3,27 @@ use std::error::Error;
 use std::fmt;
 use std::fs;
 use std::net::AddrParseError;
-use std::num::ParseIntError;
 use std::path::Path;
+use std::collections::HashMap;
+use crate::server::logger::{Logger, LogLevel};
 
-// Structures existantes avec ajout des validations
+use crate::server::route;
+
+const ALLOWED_EXTENSIONS: [&str; 1] = ["py"];
+const ALLOWED_STATUS: [&str; 8] = ["400", "403", "404", "405", "413", "500", "502", "503"];
+const MODULE : &str = "CONFIG";
+
+#[derive(Deserialize, Debug)]
+pub struct CgiConfig {
+    pub extension: String,
+    pub scrpit_path: String,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct ErrorPages {
+    pub custom_pages: HashMap<String, String>,
+}
+
 #[derive(Deserialize, Debug)]
 pub struct Route {
     pub path: String,
@@ -14,7 +31,7 @@ pub struct Route {
     pub root: String,
     pub default_page: Option<String>,
     pub directory_listing: bool,
-    pub cgi_script: Option<String>,
+    pub cgi: Option<CgiConfig>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -23,231 +40,239 @@ pub struct Host {
     pub ports: Vec<String>,
     pub server_name: String,
     pub routes: Vec<Route>,
-    pub error_pages: Option<String>,
+    pub error_pages: Option<ErrorPages>,
+    pub client_max_body_size: Option<String>,
 }
 
 #[derive(Deserialize, Debug)]
-pub struct Server {
+pub struct ServerConfig {
     pub servers: Vec<Host>,
+    #[serde(skip)]
+    pub validation_errors: Vec<String>,
 }
 
-// Énumération des erreurs possibles
 #[derive(Debug)]
 pub enum ConfigError {
-    // Erreurs IO et parsing
-    IoError(std::io::Error),
-    JsonParseError(serde_json::Error),
-    
-    // Erreurs de validation Host
-    InvalidServerAddress(AddrParseError),
-    InvalidPort(ParseIntError),
-    EmptyPorts,
-    DuplicatePorts,
-    EmptyServerName,
-    DuplicateServerName(String),
-    NoRoutes,
-    
-    // Erreurs de validation Route
-    InvalidPath(String),
-    NoMethods,
-    InvalidMethod(String),
-    InvalidRoot(String),
-    InvalidDefaultPage(String),
-    InvalidCgiScript(String),
-    
-    // Erreurs de validation error_pages
-    InvalidErrorPagesPath(String),
-    ErrorPageNotFound(String),
+    Critical(String),
+    Warning(String),
 }
 
 impl fmt::Display for ConfigError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            ConfigError::IoError(e) => write!(f, "Erreur IO: {}", e),
-            ConfigError::JsonParseError(e) => write!(f, "Erreur de parsing JSON: {}", e),
-            ConfigError::InvalidServerAddress(e) => write!(f, "Adresse serveur invalide: {}", e),
-            ConfigError::InvalidPort(e) => write!(f, "Port invalide: {}", e),
-            ConfigError::EmptyPorts => write!(f, "Aucun port spécifié"),
-            ConfigError::DuplicatePorts => write!(f, "Ports en double détectés"),
-            ConfigError::EmptyServerName => write!(f, "Nom de serveur vide"),
-            ConfigError::DuplicateServerName(name) => write!(f, "Nom de serveur en double: {}", name),
-            ConfigError::NoRoutes => write!(f, "Aucune route spécifiée"),
-            ConfigError::InvalidPath(path) => write!(f, "Chemin invalide: {}", path),
-            ConfigError::NoMethods => write!(f, "Aucune méthode HTTP spécifiée"),
-            ConfigError::InvalidMethod(method) => write!(f, "Méthode HTTP invalide: {}", method),
-            ConfigError::InvalidRoot(root) => write!(f, "Répertoire racine invalide: {}", root),
-            ConfigError::InvalidDefaultPage(page) => write!(f, "Page par défaut invalide: {}", page),
-            ConfigError::InvalidCgiScript(script) => write!(f, "Script CGI invalide: {}", script),
-            ConfigError::InvalidErrorPagesPath(path) => write!(f, "Chemin des pages d'erreur invalide: {}", path),
-            ConfigError::ErrorPageNotFound(page) => write!(f, "Page d'erreur non trouvée: {}", page),
+            ConfigError::Critical(s) => write!(f, "Critical error: {}", s),
+            ConfigError::Warning(s) => write!(f, "Warning: {}", s),
         }
     }
 }
 
-impl Error for ConfigError {}
+impl CgiConfig {
+    pub fn validate(&self) -> Vec<ConfigError> {
+        let mut errors = Vec::new();
 
-// Extension des méthodes de validation
-impl Route {
-    pub fn validate(&self) -> Result<(), ConfigError> {
-        // Validation du chemin
-        if !self.path.starts_with('/') {
-            return Err(ConfigError::InvalidPath(self.path.clone()));
+        if self.extension.is_empty() {
+            errors.push(ConfigError::Warning("CgiConfig extension is empty".to_string()));
         }
-
-        // Validation des méthodes
-        if self.methods.is_empty() {
-            return Err(ConfigError::NoMethods);
+        if self.scrpit_path.is_empty() {
+            errors.push(ConfigError::Warning("CgiConfig interpreter_path is empty".to_string()));
         }
-        
-        for method in &self.methods {
-            match method.as_str() {
-                "GET" | "POST" | "DELETE" => {},
-                _ => return Err(ConfigError::InvalidMethod(method.clone()))
-            }
+        if !ALLOWED_EXTENSIONS.contains(&self.extension.as_str()) {
+            errors.push(ConfigError::Warning("CgiConfig extension is not allowed".to_string()));
         }
-
-        // Validation du répertoire racine
-        let root_path = Path::new(&self.root);
-        if !root_path.exists() {
-            return Err(ConfigError::InvalidRoot(self.root.clone()));
-        }
-
-        // Validation de la page par défaut si elle existe
-        if let Some(default_page) = &self.default_page {
-            let page_path = root_path.join(default_page);
-            if !page_path.exists() {
-                return Err(ConfigError::InvalidDefaultPage(default_page.clone()));
-            }
-        }
-
-        // Validation du script CGI si présent
-        if let Some(cgi_script) = &self.cgi_script {
-            let script_path = root_path.join(cgi_script);
-            if !script_path.exists() {
-                return Err(ConfigError::InvalidCgiScript(cgi_script.clone()));
-            }
-        }
-
-        Ok(())
+        errors
     }
+}
+
+impl ErrorPages {
+    pub fn validate(&self) -> Vec<ConfigError> {
+        let mut errors = Vec::new();
+
+        for (status, path) in &self.custom_pages {
+            if status.is_empty() {
+                errors.push(ConfigError::Warning("ErrorPages status is empty".to_string()));
+            }
+            if path.is_empty() {
+                errors.push(ConfigError::Warning("ErrorPages path is empty".to_string()));
+            }
+            if !Path::new(path).exists() {
+                errors.push(ConfigError::Warning("ErrorPages path does not exist".to_string()));
+            }
+
+            if status.parse::<u16>().is_err() {
+                errors.push(ConfigError::Warning("ErrorPages status is not a number".to_string()));
+            }
+
+            if !ALLOWED_STATUS.contains(&status.as_str()) {
+                errors.push(ConfigError::Warning("ErrorPages status is not allowed".to_string()));
+            }
+        }
+        errors
+    }
+}
+
+
+impl Route {
+    pub fn validate(&self) -> Vec<ConfigError> {
+        let mut errors = Vec::new();
+
+        if self.path.is_empty() {
+            errors.push(ConfigError::Warning("Route path is empty".to_string()));
+        }
+        if !self.path.starts_with('/') {
+            errors.push(ConfigError::Warning("Route path does not start with /".to_string()));
+        }
+        if self.methods.is_empty() {
+            errors.push(ConfigError::Warning("Route methods is empty".to_string()));
+        }
+        if self.root.is_empty() {
+            errors.push(ConfigError::Warning("Route root is empty".to_string()));
+        }
+        if !Path::new(&self.root).exists() {
+            errors.push(ConfigError::Warning("Route root does not exist".to_string()));
+        }
+        if self.default_page.is_some() {
+            let default_page = self.default_page.as_ref().unwrap();
+            if !Path::new(default_page).exists() {
+                errors.push(ConfigError::Warning("Route default_page does not exist".to_string()));
+            }
+        }
+        if let Some(cgi) = &self.cgi {
+            errors.append(&mut cgi.validate());
+        }
+        errors
+    }
+    
 }
 
 impl Host {
-    pub fn validate(&self) -> Result<(), ConfigError> {
-        // Validation de l'adresse serveur
-        self.server_address.parse::<std::net::IpAddr>()
-            .map_err(ConfigError::InvalidServerAddress)?;
-
-        // Validation des ports
-        if self.ports.is_empty() {
-            return Err(ConfigError::EmptyPorts);
+    pub fn is_valid_essential_config(&self) -> Result<(), ConfigError> {
+        if self.server_name.is_empty() {
+            return Err(ConfigError::Critical("Host server_name is empty".to_string()));
         }
+
+        match self.server_address.parse::<std::net::IpAddr>() {
+            Ok(_) => {},
+            Err(e) => return Err(ConfigError::Critical(format!("Host server_address is invalid: {}", e))),
+            
+        }
+
+        if self.ports.is_empty() {
+            return Err(ConfigError::Critical("Host ports is empty".to_string()));
+        }
+
+        let has_valid_port = self.ports.iter().all(|port| {
+            port.parse::<u16>().is_ok()
+        });
+
+        if !has_valid_port {
+            return Err(ConfigError::Critical("Host ports contains invalid port".to_string()));
+        } 
+
+        Ok(())
+    }
+
+    pub fn collect_warnings(&self) -> Vec<ConfigError> {
+        let mut warnings = Vec::new();
 
         let mut unique_ports = std::collections::HashSet::new();
         for port in &self.ports {
-            let port_num = port.parse::<u16>()
-                .map_err(ConfigError::InvalidPort)?;
-            if !unique_ports.insert(port_num) {
-                return Err(ConfigError::DuplicatePorts);
-            }
-        }
-
-        // Validation du nom de serveur
-        if self.server_name.is_empty() {
-            return Err(ConfigError::EmptyServerName);
-        }
-
-        // Validation des routes
-        if self.routes.is_empty() {
-            return Err(ConfigError::NoRoutes);
-        }
-
-        // Validation de chaque route
-        for route in &self.routes {
-            route.validate()?;
-        }
-
-        // Validation du répertoire des pages d'erreur
-        if let Some(error_pages) = &self.error_pages {
-            let error_path = Path::new(error_pages);
-            if !error_path.exists() {
-                return Err(ConfigError::InvalidErrorPagesPath(error_pages.clone()));
-            }
-            
-            // Vérifier l'existence des pages d'erreur communes
-            for error_code in &["400", "404", "500", "502", "503"] {
-                let page_path = error_path.join(format!("{}.html", error_code));
-                if !page_path.exists() {
-                    return Err(ConfigError::ErrorPageNotFound(format!("{}.html", error_code)));
+            if let Ok(port_num) = port.parse::<u16>() {
+                if !unique_ports.insert(port_num) {
+                    warnings.push(ConfigError::Warning("Host ports contains duplicate port".to_string()));
                 }
             }
         }
 
-        Ok(())
-    }
-}
-
-impl Server {
-    pub fn validate(&self) -> Result<(), ConfigError> {
-        let mut server_names = std::collections::HashSet::new();
-        
-        for host in &self.servers {
-            // Vérifier les doublons de noms de serveur
-            if !server_names.insert(&host.server_name) {
-                return Err(ConfigError::DuplicateServerName(host.server_name.clone()));
+        if let Some(size) = &self.client_max_body_size {
+            if !size.ends_with("k") && !size.ends_with("m") {
+                warnings.push(ConfigError::Warning("Host client_max_body_size is not in k or m".to_string()));
             }
-            
-            // Valider chaque host
-            host.validate()?;
         }
-        
-        Ok(())
+
+        for route in &self.routes {
+            warnings.extend(route.validate());
+        }
+
+        if let Some(error_pages) = &self.error_pages {
+            warnings.extend(error_pages.validate());
+        }
+
+        warnings
     }
 }
 
-// Fonction de chargement améliorée avec validation
-pub fn load_config() -> Result<Server, ConfigError> {
-    let config_content = fs::read_to_string("./src/config/config.json")
-        .map_err(ConfigError::IoError)?;
+impl ServerConfig {
+    pub fn load_and_validate() -> Result<ServerConfig, ConfigError> {
+        let logger = Logger::new(LogLevel::DEBUG);
 
-        
-    let config: Server = serde_json::from_str(&config_content)
-        .map_err(ConfigError::JsonParseError)?;
-    
-    // Valider la configuration
-    config.validate()?;
-    
-    
-    Ok(config)
+        let config_content = fs::read_to_string("./src/config/config.json")
+            .map_err(|e| {
+                logger.error(&format!("Cannot read config file: {}", e), MODULE);
+                ConfigError::Critical(format!("Cannot read config file: {}", e))
+            })?;
+
+        let mut config: ServerConfig = serde_json::from_str(&config_content)
+            .map_err(|e| {
+                logger.error(&format!("Cannot parse config file: {}", e), MODULE);
+                ConfigError::Critical(format!("Cannot parse config file: {}", e))
+            })?;
+
+        let mut server_names = std::collections::HashSet::new();
+        let mut validation_errors = Vec::new();
+
+        config.servers.retain(|host| {
+            match host.is_valid_essential_config() {
+                Ok(()) => {
+                    if !server_names.insert(host.server_name.clone()) {
+                        validation_errors.push(format!("Duplicate server name: {}", host.server_name));
+                        
+                        return false;
+                    } else {
+                        let warnings = host.collect_warnings();
+                        if !warnings.is_empty() {
+                            for warn in warnings {
+                                match warn {
+                                    ConfigError::Critical(msg) => {
+                                        logger.warn(&msg, MODULE);
+                                    },
+                                    ConfigError::Warning(msg) => {
+                                        logger.error(&msg, MODULE);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    true
+                },
+                Err(e) => {
+                    //validation_errors.push(e);
+                    match e {
+                        ConfigError::Critical(msg) => {
+                            logger.error(&msg, MODULE);
+                        },
+                        ConfigError::Warning(msg) => {
+                            logger.warn(&msg, MODULE);
+                        }
+                    }
+                    false
+                }
+                
+            }
+        });
+
+        if config.servers.is_empty() {
+            let msg = "No valid server configuration found";
+            logger.error(&msg, MODULE);
+            return Err(ConfigError::Critical("No valid server configuration found".to_string()));
+        }
+
+        if !config.validation_errors.is_empty() {
+            for error in &config.validation_errors {
+                logger.error(&error, MODULE);
+            }
+            return Err(ConfigError::Critical("Invalid configuration".to_string()));
+        }
+
+        Ok(config)
+    }
 }
-
-// Gestionnaire d'erreurs HTTP et du rendu des pages d'erreur
-// #[derive(Debug)]
-// pub enum HttpError {
-//     BadRequest(String),          // 400
-//     NotFound(String),           // 404
-//     MethodNotAllowed(String),   // 405
-//     InternalServerError(String), // 500
-//     BadGateway(String),         // 502
-//     ServiceUnavailable(String), // 503
-// }
-
-// impl HttpError {
-//     pub fn status_code(&self) -> u16 {
-//         match self {
-//             HttpError::BadRequest(_) => 400,
-//             HttpError::NotFound(_) => 404,
-//             HttpError::MethodNotAllowed(_) => 405,
-//             HttpError::InternalServerError(_) => 500,
-//             HttpError::BadGateway(_) => 502,
-//             HttpError::ServiceUnavailable(_) => 503,
-//         }
-//     }
-
-//     pub fn get_error_page(&self, error_pages_path: &str) -> Option<String> {
-//         let file_name = format!("{}.html", self.status_code());
-//         let error_path = Path::new(error_pages_path).join(file_name);
-        
-//         fs::read_to_string(error_path).ok()
-//     }
-// }

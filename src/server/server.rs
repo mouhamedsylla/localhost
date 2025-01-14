@@ -24,7 +24,6 @@ use libc::{
     EPOLL_CTL_ADD, EPOLL_CTL_DEL,
 };
 
-use multipart::server::nickel::nickel::StaticFilesHandler;
 use serde_json::json;
 
 const EPOLL_EVENTS: u32 = (EPOLLIN | EPOLLET) as u32;

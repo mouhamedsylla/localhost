@@ -13,7 +13,7 @@ pub enum LogLevel {
 
 impl fmt::Display for LogLevel {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let padding = 5; // Pour aligner tous les niveaux de log
+        let padding = 5;
         match self {
             LogLevel::ERROR => write!(f, "{:padding$}", "ERROR".bold().red(), padding = padding),
             LogLevel::WARN => write!(f, "{:padding$}", "WARN".bold().yellow(), padding = padding),

@@ -1,7 +1,5 @@
 use std::{
-    path::{Path, PathBuf},
-    fs, io,
-    io::Read
+    collections::HashMap, fs, io::{self, Read}, path::{Path, PathBuf}
 };
 use mime_guess::from_path;
 use serde_json::{json, Value};
@@ -18,13 +16,18 @@ pub enum FileStatus {
     Raw
 }
 
+#[derive(Debug, Clone)]
+pub struct ErrorPages {
+    pub custom_pages: HashMap<String, String>,
+}
+
 /// Configuration for serving static files
 #[derive(Debug, Clone)]
 pub struct ServerStaticFiles {
     pub directory: PathBuf,
     index: Option<String>,
     allow_directory_listing: bool,
-    error_pages: Option<String>,
+    error_pages: Option<ErrorPages>,
     status: FileStatus,
 }
 
@@ -34,7 +37,7 @@ impl ServerStaticFiles {
         directory: PathBuf,
         index: Option<String>,
         allow_directory_listing: bool,
-        error_pages: Option<String>,
+        error_pages: Option<ErrorPages>,
     ) -> io::Result<Self> {
         // Validate directory exists
         if !directory.exists() {
@@ -97,7 +100,9 @@ impl ServerStaticFiles {
         if !path.is_file() {
             self.set_status(FileStatus::NotFound);
             if let Some(error_page) = self.error_pages.clone() {
-                return self.serve_file(Path::new(&error_page));
+                if let Some(page) = error_page.custom_pages.get("404") {
+                    return self.serve_file(Path::new(page));
+                }
             }
             
             let error_page = self.directory.join(".default/error/error_template.html");            

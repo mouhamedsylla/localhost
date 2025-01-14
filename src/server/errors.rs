@@ -1,8 +1,11 @@
+use crate::config::config::ConfigError;
+
 #[derive(Debug)]
 pub enum ServerError {
     IoError(std::io::Error),
     EpollError(&'static str),
     ConnectionError(String),
+    ConfigError(ConfigError),
 }
 
 impl From<std::io::Error> for ServerError {
@@ -18,6 +21,7 @@ impl std::fmt::Display for ServerError {
             ServerError::IoError(e) => write!(f, "IO Error: {}", e),
             ServerError::EpollError(e) => write!(f, "Epoll Error: {}", e),
             ServerError::ConnectionError(e) => write!(f, "Connection Error: {}", e),
+            ServerError::ConfigError(e) => write!(f, "Config Error: {}", e),
         }
     }
 }

@@ -213,7 +213,7 @@ impl ContentType {
     }
 }
 
-// ============= Content-Disposition Implementation =============
+// ============= Content-Disposition Implementation   =============
 
 impl ParsedContentDisposition {
     pub fn parse_content_disposition(header: &Header) -> Option<ParsedContentDisposition> {
@@ -265,7 +265,6 @@ impl HeaderParsedValue {
             },
             HeaderName::Server => HeaderParsedValue::Server(value.to_string()),
             HeaderName::Date => {
-                // TODO: Implement date parsing
                 HeaderParsedValue::Raw
             }
             _ => HeaderParsedValue::Custom(value.to_string()),

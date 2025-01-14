@@ -11,3 +11,9 @@ pub struct Route {
     pub static_files: Option<ServerStaticFiles>,
     pub cgi_config: Option<CGIConfig>,
 }
+
+impl Route {
+    pub fn is_method_allowed(&self, method: &HttpMethod) -> bool {
+        self.methods.contains(method)
+    }
+}

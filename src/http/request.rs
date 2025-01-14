@@ -172,7 +172,7 @@ pub fn parse_request(request: &[u8]) -> Option<Request> {
             .find(|h| h.name == HeaderName::ContentType)?;
 
         let parsed_content_type = ContentType::parse_content_type(content_type).unwrap();
-        let boundary = parsed_content_type.params.get("boundary").unwrap();
+        let boundary = parsed_content_type.params.get("boundary")?;
 
         Body::from_mime(&parsed_content_type.mime, body_data.to_vec(), Some(boundary))
     } else {

@@ -1,10 +1,11 @@
 use std::net::TcpStream;
 use std::os::unix::io::{AsRawFd, RawFd};
 use std::io::{Read, Write, ErrorKind};
-use crate::http::request::Request;
-use std::borrow::Cow;
-use crate::http::header::{HeaderName, HeaderParsedValue};
-use crate::http::request::parse_request;
+use crate::http::{
+    request::Request,
+    header::{HeaderName, HeaderParsedValue},
+    request::parse_request
+};
 
 const BUFFER_SIZE: usize = 4096;
 const MAX_REQUEST_SIZE: usize = 10 * 1024 * 1024;
@@ -59,8 +60,6 @@ impl Connection {
                                 // Vérifier si on a reçu toutes les données
                                 if self.buffer.len() >= total_length {
                                     // Garder les données brutes pour le parsing
-                                    println!("Total length: {}", total_length);
-                                    println!("Buffer length: {}", self.buffer.len());
                                     let request_data = self.buffer[..total_length].to_vec();
                                     self.buffer.clear();
                                     
