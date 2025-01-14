@@ -5,6 +5,7 @@ use std::{collections::HashMap, os::unix::io::RawFd};
 use crate::http::{
     body::Body,
     status::HttpStatusCode,
+    response::Response,
     header::{Header, HeaderName},
     request::{Request, HttpMethod},
 };
@@ -145,6 +146,8 @@ impl Server {
         let connection = self.connections.get_mut(&client_fd).unwrap();
         let mut should_close = false;
 
+        println!("Handling request");
+
         match connection.read_request() {
             Ok(request) => {
                 if let Some(route) = host.get_route(&request.uri) {
@@ -175,6 +178,10 @@ impl Server {
                             self.logger.error(&error.to_string(), "Server");
                         }
                     }
+                } else {
+                    let response = Response::not_found("Route not found");
+                    connection.send_response(response.to_string());
+                    self.logger.warn(&format!("Route not found: {}", request.uri), "Server");
                 }
                 connection.start_time = Instant::now();
                 connection.keep_alive = want_keep_alive(request);

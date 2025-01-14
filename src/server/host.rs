@@ -118,7 +118,6 @@ impl Host {
     }
 
     pub fn route_request(&self, request: &Request, route: &Route, uploader: Option<Uploader>) -> Result<Response, ServerError> {
-       
         match (&request.method, &request.uri) {
             // Handle file API endpoints with FileApiHandler
             (_, uri) if uri.starts_with("/api") => {

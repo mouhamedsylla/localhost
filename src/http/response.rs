@@ -1,3 +1,5 @@
+use std::vec;
+
 use crate::http::header::Header;
 use crate::http::body::Body;
 use crate::http::status::HttpStatusCode;
@@ -71,11 +73,15 @@ impl Response {
         )
     }
 
-    pub fn not_found() -> Response {
+    pub fn not_found(text: &str) -> Response {
+        let body = Body::text(text);
         Response::new(
             HttpStatusCode::NotFound,
-            Vec::new(),
-            None
+            vec![
+                Header::from_str("content-type", "text/plain"),
+                Header::from_str("content-length", &body.body_len().to_string())
+            ],
+            Some(body)
         )
     }
 

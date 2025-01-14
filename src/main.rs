@@ -43,6 +43,7 @@ fn display_banner() {
 }
 
 fn main() -> Result<(), ServerError> {
+    print!("{esc}[2J{esc}[1;1H", esc = 27 as char);
     display_banner();
     let uploader = Uploader::new(Path::new("example/upload").to_path_buf());
 
@@ -97,7 +98,7 @@ fn main() -> Result<(), ServerError> {
                     routes
                 ).unwrap();
 
-                let _ = servers.add_host(host.clone());
+                let _ = servers.add_host(host);
 
             }
         }
