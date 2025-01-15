@@ -45,6 +45,7 @@ fn display_banner() {
 fn main() -> Result<(), ServerError> {
     print!("{esc}[2J{esc}[1;1H", esc = 27 as char);
     display_banner();
+
     let uploader = Uploader::new(Path::new("example/upload").to_path_buf());
 
     let mut servers = Server::new(Some(uploader)).unwrap();
@@ -58,7 +59,7 @@ fn main() -> Result<(), ServerError> {
                 if let Some(tab_routes) = host_config.routes {
                     for r in tab_routes {
                         let methods = r.methods.iter()
-                            .map(|m| HttpMethod::from_str(m))
+                            .flat_map(|v| v.iter().map(|m| HttpMethod::from_str(m)))
                             .collect::<Vec<HttpMethod>>();
     
                         let error_pages = if let Some(ref pages) = host_config.error_pages {
@@ -70,7 +71,7 @@ fn main() -> Result<(), ServerError> {
                         };
     
                         let results = ServerStaticFiles::new(
-                            PathBuf::from(r.root), r.default_page, r.directory_listing, error_pages);
+                            PathBuf::from(r.root.unwrap()), r.default_page, r.directory_listing.unwrap_or(false), error_pages);
     
                         let static_files = match results {
                             Ok(files) => Some(files),
@@ -87,14 +88,14 @@ fn main() -> Result<(), ServerError> {
                                 None
                             };
     
-                        routes.push(Route { path: r.path, methods , static_files: static_files, cgi_config });
+                        routes.push(Route { path: r.path.unwrap(), methods , static_files: static_files, cgi_config });
                     }
                 }
 
                 let host = Host::new(
-                    &host_config.server_address,
-                    &host_config.server_name,
-                    host_config.ports,
+                    host_config.server_address.as_deref().unwrap_or(""),
+                    host_config.server_name.as_deref().unwrap_or(""),
+                    host_config.ports.unwrap_or_default(),
                     routes
                 ).unwrap();
 

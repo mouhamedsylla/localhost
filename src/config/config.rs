@@ -26,19 +26,19 @@ pub struct ErrorPages {
 
 #[derive(Deserialize, Debug)]
 pub struct Route {
-    pub path: String,
-    pub methods: Vec<String>,
-    pub root: String,
+    pub path: Option<String>,
+    pub methods: Option<Vec<String>>,
+    pub root: Option<String>,
     pub default_page: Option<String>,
-    pub directory_listing: bool,
+    pub directory_listing: Option<bool>,
     pub cgi: Option<CgiConfig>,
 }
 
 #[derive(Deserialize, Debug)]
 pub struct Host {
-    pub server_address: String,
-    pub ports: Vec<String>,
-    pub server_name: String,
+    pub server_address: Option<String>,
+    pub ports: Option<Vec<String>>,
+    pub server_name: Option<String>,
     pub routes: Option<Vec<Route>>,
     pub error_pages: Option<ErrorPages>,
     pub client_max_body_size: Option<String>,
@@ -115,20 +115,36 @@ impl Route {
     pub fn validate(&self) -> Vec<ConfigError> {
         let mut errors = Vec::new();
 
-        if self.path.is_empty() {
-            errors.push(ConfigError::Warning("Route path is empty".to_string()));
+        if let Some(path) = &self.path {
+            if path.is_empty() {
+                errors.push(ConfigError::Warning("Route path is empty".to_string()));
+            }
+        } else {
+            errors.push(ConfigError::Warning("Route is undefined".to_string()));
         }
-        if !self.path.starts_with('/') {
-            errors.push(ConfigError::Warning("Route path does not start with /".to_string()));
+        if let Some(path_start) = &self.path {
+            if !path_start.starts_with("/") {
+                errors.push(ConfigError::Warning("Route path does not start with /".to_string()));
+            }
         }
-        if self.methods.is_empty() {
-            errors.push(ConfigError::Warning("Route methods is empty".to_string()));
+        if let Some(method) = &self.methods {
+            if method.is_empty() {
+                errors.push(ConfigError::Warning("Route methods is empty".to_string()));
+            }
+        } else {
+            errors.push(ConfigError::Warning("Route methods is undefined".to_string()));
         }
-        if self.root.is_empty() {
-            errors.push(ConfigError::Warning("Route root is empty".to_string()));
+        if let Some(root) = &self.root {
+            if root.is_empty() {
+                errors.push(ConfigError::Warning("Route root is empty".to_string()));
+            }
+        } else {
+            errors.push(ConfigError::Warning("Route root is undefined".to_string()));
         }
-        if !Path::new(&self.root).exists() {
-            errors.push(ConfigError::Warning("Route root does not exist".to_string()));
+        if let Some(root) = &self.root {
+            if !Path::new(root).exists() {
+                errors.push(ConfigError::Warning("Route root does not exist".to_string()));
+            }
         }
         if self.default_page.is_some() {
             let default_page = self.default_page.as_ref().unwrap();
@@ -146,23 +162,38 @@ impl Route {
 
 impl Host {
     pub fn is_valid_essential_config(&self) -> Result<(), ConfigError> {
-        if self.server_name.is_empty() {
-            return Err(ConfigError::Critical("Host server_name is empty".to_string()));
+        let mut has_valid_port = false;
+
+        if let Some(server_name) = &self.server_name {
+            if server_name.is_empty() {
+                return Err(ConfigError::Critical("Host server_name is empty".to_string()));
+            }
+        } else {
+            return Err(ConfigError::Critical("Host server_name is undefined".to_string()));
         }
 
-        match self.server_address.parse::<std::net::IpAddr>() {
-            Ok(_) => {},
-            Err(e) => return Err(ConfigError::Critical(format!("Host server_address is invalid: {}", e))),
-            
+        if let Some(server_address) = &self.server_address {
+            match server_address.parse::<std::net::IpAddr>() {
+                Ok(_) => {},
+                Err(e) => return Err(ConfigError::Critical(format!("Host server_address is invalid: {}", e))),
+            }
+        } else {
+            return Err(ConfigError::Critical("Host server_address is undefined".to_string()));
         }
 
-        if self.ports.is_empty() {
-            return Err(ConfigError::Critical("Host ports is empty".to_string()));
+        if let Some(ports) = &self.ports {
+            if ports.is_empty() {
+                return Err(ConfigError::Critical("Host ports is empty".to_string()));
+            }
+        } else {
+            return Err(ConfigError::Critical("Host ports is undefined".to_string()));
         }
 
-        let has_valid_port = self.ports.iter().all(|port| {
-            port.parse::<u16>().is_ok()
-        });
+        if let Some(ports) = &self.ports {
+            has_valid_port = ports.iter().all(|port| {
+                port.parse::<u16>().is_ok()
+            });
+        }
 
         if !has_valid_port {
             return Err(ConfigError::Critical("Host ports contains invalid port".to_string()));
@@ -175,10 +206,12 @@ impl Host {
         let mut warnings = Vec::new();
 
         let mut unique_ports = std::collections::HashSet::new();
-        for port in &self.ports {
-            if let Ok(port_num) = port.parse::<u16>() {
-                if !unique_ports.insert(port_num) {
-                    warnings.push(ConfigError::Warning("Host ports contains duplicate port".to_string()));
+        if let Some(ports) = &self.ports {
+            for port in ports {
+                if let Ok(port_num) = port.parse::<u16>() {
+                    if !unique_ports.insert(port_num) {
+                        warnings.push(ConfigError::Warning("Host ports contains duplicate port".to_string()));
+                    }
                 }
             }
         }
@@ -226,7 +259,7 @@ impl ServerConfig {
             match host.is_valid_essential_config() {
                 Ok(()) => {
                     if !server_names.insert(host.server_name.clone()) {
-                        validation_errors.push(format!("Duplicate server name: {}", host.server_name));
+                        validation_errors.push(format!("Duplicate server name: {:?}", host.server_name));
                         
                         return false;
                     } else {
