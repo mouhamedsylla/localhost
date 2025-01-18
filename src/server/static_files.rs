@@ -78,8 +78,8 @@ impl ServerStaticFiles {
         }
 
         if let Some(index) = &self.index  {
-            let index_path = self.directory.join(index);
-            if index_path.is_file() && full_path == self.directory && !self.allow_directory_listing {
+            let index_path = full_path.join(index);
+            if index_path.is_file() && !self.allow_directory_listing {
                 return self.serve_file(&index_path);
             }
         }
@@ -96,12 +96,11 @@ impl ServerStaticFiles {
 impl ServerStaticFiles {
     /// Serves a static file
     pub fn serve_file(&mut self, path: &Path) -> io::Result<(Vec<u8>, Option<mime>, FileStatus)> {
-
         if !path.is_file() {
             self.set_status(FileStatus::NotFound);
             if let Some(error_page) = self.error_pages.clone() {
                 if let Some(page) = error_page.custom_pages.get("404") {
-                    return self.serve_file(Path::new(page));
+                    return self.serve_file(Path::new(self.directory.join(page).to_str().unwrap()));
                 }
             }
             

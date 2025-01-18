@@ -3,14 +3,27 @@
     {
       "server_address": "127.0.0.1",
       "server_name": "localhost",
+      "ports": ["8080"],
       "client_body_size_limit": "10M",
+      "error_pages": {
+        "custom_pages": {
+          "404": "error/404.html"
+        }
+      },
       "routes": [
         {
           "path": "/",
-          "methods": ["GET", "POST"],
+          "methods": ["GET", "POST", "DELETE"],
           "root": "static",
-          "directory_listing": false,
-          "cgi_script": "cgi-bin/main.py"
+          "default_page": "index.html",
+          "directory_listing": false
+        },
+        {
+          "path": "/home",
+          "methods": ["GET", "POST", "DELETE"],
+          "root": "static",
+          "default_page": "index.html",
+          "directory_listing": false
         }
       ]
     },

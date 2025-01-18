@@ -3,7 +3,7 @@ use std::vec;
 use crate::http::header::Header;
 use crate::http::body::Body;
 use crate::http::status::HttpStatusCode;
-use crate::http::header::{HeaderName, HeaderValue, HeaderParsedValue, ContentType};
+use crate::http::header::{HeaderName, HeaderValue, HeaderParsedValue, ContentType, Cookie, CookieOptions};
 
 #[derive(Clone)]
 pub struct Response {
@@ -13,7 +13,7 @@ pub struct Response {
     pub body: Option<Body>
 }
 
-pub struct ResponseBuilder {
+pub struct ResponseBuilder { 
     version: String,
     status_code: HttpStatusCode,
     headers: Vec<Header>,
@@ -36,6 +36,19 @@ impl ResponseBuilder {
     }
 
     pub fn header(mut self, header: Header) -> ResponseBuilder {
+        self.headers.push(header);
+        self
+    }
+
+    pub fn setcookie(mut self, name: &str, value: &str) -> ResponseBuilder {
+        let header = Header::from_str("set-cookie", &format!("{}={}", name, value));
+        self.headers.push(header);
+        self
+    }
+
+    pub fn setcookie_with_options(mut self, name: &str, value: &str, options: CookieOptions) -> ResponseBuilder {
+        let cookie = Cookie::with_options(name, value, options);
+        let header = Header::from_str("set-cookie", &cookie.to_string());
         self.headers.push(header);
         self
     }

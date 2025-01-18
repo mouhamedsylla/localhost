@@ -74,6 +74,8 @@ impl MultipartForm {
         }
     }
 
+
+
     pub fn set_data(
         &mut self,
         data: BinaryData, 
@@ -179,7 +181,6 @@ impl Body {
 
             // Multipart form data
             "multipart/form-data" => {
-                println!("Data length: {}", data.len());
                 if let Some(boundary) = boundary {
                     let mut form = MultipartForm::new();
                     form.set_data(data, boundary);
@@ -191,7 +192,6 @@ impl Body {
 
             // Images
             mime if mime.starts_with("image/") => {
-                println!("Image length: {}", data.len());
                 Ok(Body::Binary(data))
             }
 
@@ -367,29 +367,60 @@ fn split_multipart(data: &[u8], boundary: &[u8]) -> Vec<Vec<u8>> {
     parts
 }
 
-
 fn parse_part(part: &[u8]) -> Option<(Vec<Header>, Vec<u8>)> {
     let mut headers = Vec::new();
     let mut pos = 0;
-    let mut part_data = Vec::new();
 
-    while let Some(line_end) = find_subsequence(&part[pos..], b"\r\n") {
-        if line_end == 2 {
-            pos += 4;
-            break;
+    // Chercher la fin des headers (séquence \r\n\r\n)
+    let headers_end = find_subsequence(part, b"\r\n\r\n")?;
+    
+    // Parser les headers
+    let headers_data = &part[..headers_end];
+    for line in headers_data.split(|&b| b == b'\n') {
+        let line = line.strip_suffix(b"\r").unwrap_or(line);
+        if line.is_empty() {
+            continue;
         }
         
-        if let Ok(line) = str::from_utf8(&part[pos..pos + line_end]) {
-            if let Some((name, value)) = line.split_once(':') {
-                headers.push(Header::from_str(name, value));
+        if let Ok(header_str) = str::from_utf8(line) {
+            if let Some((name, value)) = header_str.split_once(':') {
+                headers.push(Header::from_str(name.trim(), value.trim()));
             }
-        } else {
-            part_data.extend_from_slice(&part[pos..pos + line_end]);
         }
-        pos += line_end + 2;
     }
 
-    Some((headers, part_data))
+    // Extraire les données après les headers
+    let content_start = headers_end + 4; // Skip \r\n\r\n
+    let content_data = if content_start < part.len() {
+        part[content_start..].to_vec()
+    } else {
+        Vec::new()
+    };
+
+    Some((headers, content_data))
+}
+
+// Fonction utilitaire pour vérifier si un content-type est du texte
+fn is_text_content_type(content_type: &str) -> bool {
+    content_type.starts_with("text/") || 
+    content_type == "application/json" ||
+    content_type == "application/javascript" ||
+    content_type == "application/xml" ||
+    content_type == "application/x-www-form-urlencoded"
+}
+
+// Fonction helper pour le traitement des données
+fn process_part_data(data: &[u8], content_type: &str) -> Vec<u8> {
+    if is_text_content_type(content_type) {
+        // Pour les fichiers texte, on nettoie les caractères de fin de ligne
+        data.iter()
+            .filter(|&&b| b != b'\r')
+            .copied()
+            .collect()
+    } else {
+        // Pour les fichiers binaires, on garde les données telles quelles
+        data.to_vec()
+    }
 }
 
 fn find_subsequence(haystack: &[u8], needle: &[u8]) -> Option<usize> {

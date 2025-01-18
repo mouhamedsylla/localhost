@@ -195,6 +195,8 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const formData = new FormData();
             formData.append('file', file);
+
+            console.log("Length: ", formData.length);
             
             const response = await fetch('http://localhost:8082/api/upload', {
                 method: 'POST',

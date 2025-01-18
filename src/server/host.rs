@@ -113,7 +113,7 @@ impl Host {
 
     pub fn get_route(&self, path: &str) -> Option<&Route> {
         self.routes.iter().find(|route| { 
-            path.starts_with(&route.path) 
+            &route.path == path 
         })
     }
 

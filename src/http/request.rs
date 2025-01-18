@@ -151,7 +151,6 @@ impl Request {
 
 }
 
-
 pub fn parse_request(request: &[u8]) -> Option<Request> {
     let mut headers = [httparse::EMPTY_HEADER; 64];
     let mut req = HttparseRequest::new(&mut headers);
@@ -166,6 +165,7 @@ pub fn parse_request(request: &[u8]) -> Option<Request> {
         .iter()
         .map(|h| Header::from_str(h.name, std::str::from_utf8(h.value).unwrap())).collect::<Vec<Header>>();
 
+
     let result = if request.len() > header_len {
         let body_data = &request[header_len..];
         let content_type = headers.iter()
@@ -173,6 +173,7 @@ pub fn parse_request(request: &[u8]) -> Option<Request> {
 
         let parsed_content_type = ContentType::parse_content_type(content_type).unwrap();
         let boundary = parsed_content_type.params.get("boundary")?;
+
 
         Body::from_mime(&parsed_content_type.mime, body_data.to_vec(), Some(boundary))
     } else {

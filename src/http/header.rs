@@ -3,6 +3,28 @@ use std::time::SystemTime;
 use std::fmt;
 use std::collections::HashMap;
 
+// ============= Type Imports & Re-exports =============
+mod types {
+    use super::*;
+    
+    // Déplacer les types de base ici
+    pub use super::{Header, HeaderValue, HeaderName, HeaderParsedValue};
+}
+
+// ============= Content Types =============
+mod content {
+    use super::*;
+    
+    pub use super::{ParsedContentType, ParsedContentDisposition, ContentType};
+}
+
+// ============= Cookie Handling =============
+mod cookie {
+    use super::*;
+    
+    pub use super::{Cookie, CookieOptions, SameSitePolicy};
+}
+
 // ============= Main Structures =============
 #[derive(Debug, Clone)]
 pub struct Header {
@@ -16,6 +38,7 @@ pub struct HeaderValue {
     pub parsed_value: Option<HeaderParsedValue>,
 }
 
+#[derive(Debug)]
 pub struct ParsedContentType {
     pub mime: String,
     pub params: HashMap<String, String>,
@@ -36,19 +59,22 @@ pub enum HeaderParsedValue {
     Server(String),
     Date(SystemTime),
     Custom(String),
+    Cookie(Cookie),
     Raw,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HeaderName {
-    // Content headers
+    // Standard headers
     ContentType,
     ContentLength,
     ContentDisposition,
-
-    // Connection headers
     Connection,
     TransferEncoding,
+    Cookie,
+    SetCookie,
+    CacheControl,
+    Date,
     Host,
     
     // Accept headers
@@ -59,17 +85,15 @@ pub enum HeaderName {
     // Response headers
     Server,
     StatusCode,
-    Date,
     
     // Cache headers
-    CacheControl,
     ETag,
     LastModified,
     
     // Security headers
     StrictTransportSecurity,
     
-    // Custom headers
+    // Custom header
     Custom(String),
 }
 
@@ -92,6 +116,31 @@ pub enum TransferEncoding {
     Deflate,
     Gzip,
     Identity,
+}
+
+#[derive(Debug, Clone)]
+pub struct Cookie {
+    name: String,
+    value: String,
+    options: CookieOptions,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CookieOptions {
+    http_only: bool,
+    secure: bool,
+    max_age: Option<u64>,
+    path: Option<String>,
+    expires: Option<SystemTime>,
+    domain: Option<String>,
+    pub same_site: SameSitePolicy,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum SameSitePolicy {
+    Strict,
+    Lax,
+    None,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -163,6 +212,8 @@ impl HeaderName {
             HeaderName::ContentDisposition => "Content-Disposition",
             HeaderName::TransferEncoding => "Transfer-Encoding",
             HeaderName::Connection => "Connection",
+            HeaderName::Cookie => "Cookie",
+            HeaderName::SetCookie => "Set-Cookie",
             HeaderName::Date => "Date",
             HeaderName::Host => "Host",
             HeaderName::Accept => "Accept",
@@ -263,6 +314,13 @@ impl HeaderParsedValue {
                 "close" => HeaderParsedValue::Connection(Connection::Close),
                 _ => HeaderParsedValue::Raw,
             },
+            HeaderName::Cookie => {
+                if let Some(cookie) = Cookie::parse(value) {
+                    HeaderParsedValue::Cookie(cookie)
+                } else {
+                    HeaderParsedValue::Raw
+                }
+            }
             HeaderName::Server => HeaderParsedValue::Server(value.to_string()),
             HeaderName::Date => {
                 HeaderParsedValue::Raw
@@ -271,6 +329,109 @@ impl HeaderParsedValue {
         }
     }
 }
+
+// ============= Cookie Implementations  =============
+impl Cookie {
+    pub fn new(name: &str, value: &str) -> Cookie {
+        Cookie { 
+            name: name.to_string(), 
+            value: value.to_string(), 
+            options: CookieOptions::default()
+        }
+    }
+
+    pub fn with_options(name: &str, value: &str, options: CookieOptions) -> Cookie {
+        Cookie { name: name.to_string(), value: value.to_string(), options }
+    }
+
+    pub fn parse(cookie_str: &str) -> Option<Cookie> {
+        let mut parts = cookie_str.split(';');
+
+        //Parse name=value
+        let name_value = parts.next()?;
+        let mut name_value_parts = name_value.split('=');
+        let name = name_value_parts.next()?.trim();
+        let value = name_value_parts.next()?.trim();
+
+        let mut cookie = Cookie::new(name, value);
+
+        //Parse options
+        for opt in parts {
+            let mut opt_parts = opt.split('=');
+            let key = opt_parts.next()?.trim();
+            let value = opt_parts.next().unwrap_or("").trim();
+
+            match key.to_lowercase().as_str() {
+                "httponly" => cookie.options.http_only = true,
+                "secure" => cookie.options.secure = true,
+                "max-age" => cookie.options.max_age = Some(value.parse().unwrap_or(0)),
+                "path" => cookie.options.path = Some(value.to_string()),
+                "expires" => cookie.options.expires = Some(SystemTime::now()),
+                "domain" => cookie.options.domain = Some(value.to_string()),
+                "samesite" => cookie.options.same_site = match value.to_lowercase().as_str() {
+                    "strict" => SameSitePolicy::Strict,
+                    "lax" => SameSitePolicy::Lax,
+                    _ => SameSitePolicy::None,
+                },
+                _ => {}
+            }
+        }
+
+        Some(cookie)
+    }
+
+    pub fn to_string(&self) -> String {
+        let mut cookie_str = format!("{}={}", self.name, self.value);
+
+        if self.options.http_only {
+            cookie_str.push_str("; HttpOnly");
+        }
+
+        if self.options.secure {
+            cookie_str.push_str("; Secure");
+        }
+
+        if let Some(max_age) = self.options.max_age {
+            cookie_str.push_str(&format!("; Max-Age={}", max_age));
+        }
+
+        if let Some(ref path) = self.options.path {
+            cookie_str.push_str(&format!("; Path={}", path));
+        }
+
+        if let Some(ref expires) = self.options.expires {
+            cookie_str.push_str(&format!("; Expires={:?}", expires));
+        }
+
+        if let Some(ref domain) = self.options.domain {
+            cookie_str.push_str(&format!("; Domain={}", domain));
+        }
+
+        match self.options.same_site {
+            SameSitePolicy::Strict => cookie_str.push_str("; SameSite=Strict"),
+            SameSitePolicy::Lax => cookie_str.push_str("; SameSite=Lax"),
+            SameSitePolicy::None => cookie_str.push_str("; SameSite=None"),
+        }
+
+        cookie_str
+    }
+}
+
+impl Default for CookieOptions {
+    fn default() -> Self {
+        CookieOptions {
+            http_only: false,
+            secure: false,
+            max_age: None,
+            path: Some("/".to_string()),
+            expires: None,
+            domain: None,
+            same_site: SameSitePolicy::Lax
+        }
+    }
+    
+}
+
 
 // ============= Display Implementations =============
 impl fmt::Display for Header {

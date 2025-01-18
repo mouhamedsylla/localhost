@@ -43,9 +43,10 @@ fn display_banner() {
 }
 
 fn main() -> Result<(), ServerError> {
+
     print!("{esc}[2J{esc}[1;1H", esc = 27 as char);
     display_banner();
-
+    
     let uploader = Uploader::new(Path::new("example/upload").to_path_buf());
 
     let mut servers = Server::new(Some(uploader)).unwrap();

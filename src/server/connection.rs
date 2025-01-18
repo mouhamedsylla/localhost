@@ -1,129 +1,121 @@
-use std::net::TcpStream;
 use std::os::unix::io::{AsRawFd, RawFd};
-use std::io::{Read, Write, ErrorKind};
+use std::time::{Instant, Duration};
+use std::io::{self, Read, Write, Error};
+use crate::http::header;
 use crate::http::{
     request::Request,
     header::{HeaderName, HeaderParsedValue},
     request::parse_request
 };
 
-const BUFFER_SIZE: usize = 4096;
-const MAX_REQUEST_SIZE: usize = 10 * 1024 * 1024;
+use libc::{
+    epoll_event,
+    EPOLLET, EPOLLIN, EPOLLHUP, EPOLLERR,
+    EPOLL_CTL_ADD, EPOLL_CTL_DEL,
+};
 
-#[derive(Debug)]
+use crate::server::stream::request_stream::{
+    RequestStream,
+    RequestState,
+    RequestData,
+};
+
+#[derive(Debug, Clone)]
+pub enum ConnectionState {
+    AwaitingRequest,
+    Complete(Request),
+    Error(String),
+}
 
 pub struct Connection {
-    pub stream: TcpStream,
     pub client_fd: RawFd,
     pub host_name: String,
     pub keep_alive: bool,
+    pub reader: Box<dyn RequestStream>,
+    pub state: ConnectionState,
     pub start_time: std::time::Instant,
-    buffer: Vec<u8>,
 }
 
 impl Connection {
-    pub fn new(stream: TcpStream, host_name: String) -> Self {
-        let client_fd = stream.as_raw_fd();
+    pub fn new(client_fd: RawFd, host_name: String, reader: Box<dyn RequestStream>) -> Self {
+        
         Connection {
-            stream,
             client_fd,
             host_name,
             keep_alive: true,
+            reader,
+            state: ConnectionState::AwaitingRequest,
             start_time: std::time::Instant::now(),
-            buffer: Vec::new(),
         }
     }
 
-    pub fn read_request(&mut self) -> Result<Request, std::io::Error> {
-        let mut temp_buffer = vec![0; BUFFER_SIZE];
-        
-        loop {
-            match self.stream.read(&mut temp_buffer) {
-                Ok(0) => {
-                    return Err(std::io::Error::new(
-                        ErrorKind::UnexpectedEof,
-                        "Connection closed by peer"
-                    ));
-                }
-                Ok(n) => {
-                    // Ajouter les données au buffer
-                    self.buffer.extend_from_slice(&temp_buffer[..n]);
-    
-                    // Chercher la fin des headers
-                    if let Some(headers_end) = find_headers_end(&self.buffer) {
-                        // Convertir UNIQUEMENT les headers en String
-                        let headers_data = &self.buffer[..headers_end];
-                        if let Ok(headers_str) = String::from_utf8(headers_data.to_vec()) {
-                            if let Some(content_length) = get_content_length(&headers_str) {
-                                let total_length = headers_end + content_length;
-                                
-                                // Vérifier si on a reçu toutes les données
-                                if self.buffer.len() >= total_length {
-                                    // Garder les données brutes pour le parsing
-                                    let request_data = self.buffer[..total_length].to_vec();
-                                    self.buffer.clear();
+    pub fn handle_event(&mut self, event: u32) -> io::Result<ConnectionState> {
+        if event & EPOLLIN as u32 != 0 {
+            match self.reader.read_next() {
+                Ok(request_state) => {
+                    match request_state {
+                        RequestState::Complete(data) => {
+                            match self.process_complete_request(data) {
+                                Ok(request) => {
                                     
-                                    // Utiliser parse_request avec les données brutes
-                                    return match parse_request(&request_data) {
-                                        Some(request) => Ok(request),
-                                        None => Err(std::io::Error::new(
-                                            ErrorKind::InvalidData,
-                                            "Failed to parse request"
-                                        ))
-                                    };
+                                    self.state = ConnectionState::Complete(request);
+                                    Ok(self.state.clone())
                                 }
-                            } else {
-                                // Pas de Content-Length, la requête est complète après les headers
-                                let request_data = self.buffer[..headers_end].to_vec();
-                                self.buffer.clear();
-                                
-                                return match parse_request(&request_data) {
-                                    Some(request) => Ok(request),
-                                    None => Err(std::io::Error::new(
-                                        ErrorKind::InvalidData,
-                                        "Failed to parse request"
-                                    ))
-                                };
+                                Err(e) => {
+                                    self.state = ConnectionState::Error(e.to_string());
+                                    Ok(self.state.clone())
+                                }
                             }
                         }
-                    }
-    
-                    // Vérifier la taille maximale
-                    if self.buffer.len() > MAX_REQUEST_SIZE {
-                        self.buffer.clear();
-                        return Err(std::io::Error::new(
-                            ErrorKind::InvalidData,
-                            "Request exceeded maximum size"
-                        ));
+                        RequestState::ProcessingBody {..} => {
+                            Ok(self.state.clone())
+                        }
+                        RequestState::AwaitingHeaders => {
+                            Ok(ConnectionState::AwaitingRequest)
+                        }
+                        RequestState::EndOfStream => {
+                            self.state = ConnectionState::Error("End of stream".to_string());
+                            Ok(self.state.clone())
+                        }
                     }
                 }
-                Err(e) if e.kind() == ErrorKind::WouldBlock => {
-                    if !self.buffer.is_empty() {
-                        continue;
-                    }
-                    return Err(e);
+                Err(e ) => {
+                    self.state = ConnectionState::Error(e.to_string());
+                    Ok(self.state.clone())
                 }
-                Err(e) => return Err(e),
             }
+        } else {
+            Ok(self.state.clone())
         }
+    }
+
+    fn process_complete_request(&mut self, data: RequestData) -> io::Result<Request> {
+        match parse_request(&data.data) {
+            Some(request) => {
+                self.reset();
+                Ok(request)
+            },
+            None => Err(io::Error::new(io::ErrorKind::InvalidData, "failed parsed request"))
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.reader.reset();
+        self.state = ConnectionState::AwaitingRequest;
+        self.start_time = Instant::now();
     }
 
     pub fn send_response(&mut self, response: String) -> std::io::Result<()> {
-        self.stream.write_all(response.as_bytes())?;
-        self.stream.flush()
+        if let Err(e) = self.reader.write(response.as_bytes()) {
+            println!("erreur to write: {}", e);
+        };
+        self.reader.flush()
     }
-
 }
 
-fn find_headers_end(data: &[u8]) -> Option<usize> {
-    data.windows(4)
-        .position(|window| window == b"\r\n\r\n")
-        .map(|pos| pos + 4)
-}
-
-fn get_content_length(headers: &str) -> Option<usize> {
-    headers.lines()
-        .find(|line| line.to_lowercase().starts_with("content-length:"))
-        .and_then(|line| line.split(':').nth(1))
-        .and_then(|len| len.trim().parse().ok())
+fn want_keep_alive(request: Request) -> bool {
+    match request.get_header(HeaderName::Connection) {
+        Some(header) => header.value.value.to_lowercase() == "keep-alive",
+        None => true
+    }
 }

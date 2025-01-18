@@ -2,6 +2,7 @@ use std::os::fd::AsRawFd;
 use std::path::Path;
 use std::time::{Instant, Duration};
 use std::{collections::HashMap, os::unix::io::RawFd};
+use crate::http::response;
 use crate::http::{
     body::Body,
     status::HttpStatusCode,
@@ -15,9 +16,11 @@ use crate::server::{
     route::Route,
     uploader::Uploader,
     errors::ServerError,
-    connection::Connection,
+    connection::{Connection, ConnectionState},
     logger::{Logger, LogLevel},
 };
+
+use crate::server::stream::request_stream::unifiedReader::UnifiedReader;
 
 use libc::{
     epoll_create1, epoll_ctl, epoll_event, epoll_wait, 
@@ -31,7 +34,6 @@ const EPOLL_EVENTS: u32 = (EPOLLIN | EPOLLET) as u32;
 const TIMEOUT_DURATION: Duration = Duration::from_secs(60);
 const MAX_EVENTS: usize = 1024;
 
-#[derive(Debug)]
 pub struct Server {
     hosts: Vec<Host>,
     connections: HashMap<RawFd, Connection>,
@@ -135,63 +137,92 @@ impl Server {
             }
         }
 
-        let connection = Connection::new(stream, host.server_name.clone());
+        let reader = UnifiedReader::new(stream);
+
+        let connection = Connection::new(client_fd, host.server_name.clone(), Box::new(reader));
         self.logger.debug(&format!("New connection on host: {} - {}", host.server_name, listener.port), "server");
         self.connections.insert(client_fd, connection);
         
         Ok(())
     }
 
-    fn handle_request(&mut self, client_fd: RawFd, host: Host) -> Result<(), ServerError> {
-        let connection = self.connections.get_mut(&client_fd).unwrap();
+
+    fn handle_connection_event(&mut self, fd: RawFd, events: u32, host: Host) -> Result<(), ServerError> {
+        let connection = self.connections.get_mut(&fd)
+            .ok_or(ServerError::ConnectionError("Connection not found".to_string()))?;
         let mut should_close = false;
 
-        println!("Handling request");
 
-        match connection.read_request() {
-            Ok(request) => {
-                if let Some(route) = host.get_route(&request.uri) {
-                    match host.route_request(&request, route, self.uploader.clone()) {
-                        Ok(mut response) => {
-                            // Ajouter les headers CORS et Connection
-                            let connection_header = if connection.keep_alive && want_keep_alive(request.clone()) {
-                                "keep-alive"
-                            } else {
-                                "close"
-                            };
-                            response.headers.extend(vec![
-                                Header::from_str("Connection", connection_header),
-                                Header::from_str("Access-Control-Allow-Origin", "*"),
-                                Header::from_str("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS"),
-                                Header::from_str("Access-Control-Allow-Headers", "Content-Type"),
-                            ]);
+        match connection.handle_event(events) {
+            Ok(state) => {
+                match state {
+                    ConnectionState::Complete(request) => {
+                        if let Some(route) = host.get_route(&request.uri) {
+                            match host.route_request(&request, route, self.uploader.clone()) {
+                                Ok(mut response) => {
+                                    // Add CORS and Connection headers
+                                    let connection_header = if connection.keep_alive && want_keep_alive(request.clone()) {
+                                        "keep-alive"
+                                    } else {
+                                        "close"
+                                    };
+                                    response.headers.extend(vec![
+                                        Header::from_str("Connection", connection_header),
+                                        Header::from_str("Access-Control-Allow-Origin", "*"),
+                                        Header::from_str("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS"),
+                                        Header::from_str("Access-Control-Allow-Headers", "Content-Type"),
+                                    ]);
 
-                            connection.send_response(response.clone().to_string());
-                            let message = format!("{} - {} - {}", 
-                                request.method,
-                                &request.uri, 
-                                response.status_code.as_str()
-                            );
-                            self.logger.info(&message, "Server");
-                        },
-                        Err(error) => {
-                            self.logger.error(&error.to_string(), "Server");
+                                    if let Err(e) = connection.send_response(response.clone().to_string()) {
+                                        if e.kind() != std::io::ErrorKind::WouldBlock {
+                                            self.logger.error(&format!("Failed to send response: {}", e), "Server");
+                                            should_close = true;
+                                        }
+                                    }
+
+                                    let message = format!("{} - {} - {}", 
+                                        request.method,
+                                        &request.uri, 
+                                        response.status_code.as_str()
+                                    );
+                                    self.logger.info(&message, "Server");
+                                },
+                                Err(error) => {
+                                    self.logger.error(&error.to_string(), "Server");
+                                }
+                            }
+                        } else {
+                            let response = Response::not_found("Route not found");
+                            if let Err(e) = connection.send_response(response.to_string()) {
+                                if e.kind() != std::io::ErrorKind::WouldBlock {
+                                    self.logger.error(&format!("Failed to send response: {}", e), "Server");
+                                    should_close = true;
+                                }
+                            }
+                            self.logger.warn(&format!("Route not found: {}", request.uri), "Server");
                         }
-                    }
-                } else {
-                    let response = Response::not_found("Route not found");
-                    connection.send_response(response.to_string());
-                    self.logger.warn(&format!("Route not found: {}", request.uri), "Server");
-                }
-                connection.start_time = Instant::now();
-                connection.keep_alive = want_keep_alive(request);
-                should_close = !connection.keep_alive;
-            },
-            Err(error) => should_close = true
-        }
+                        connection.start_time = Instant::now();
+                        connection.keep_alive = want_keep_alive(request);
+                        should_close = !connection.keep_alive;
+                    },
 
+                    ConnectionState::AwaitingRequest => {},
+                    ConnectionState::Error(error) => {
+                        self.logger.error(&error, "Server");
+                        should_close = true;
+                    }
+                }
+            }
+            Err(e) => {
+                // Only treat non-WouldBlock errors as actual errors
+                if e.kind() != std::io::ErrorKind::WouldBlock {
+                    self.logger.error(&format!("Connection error: {}", e), "Server");
+                    should_close = true;
+                }
+            }
+        }
         if should_close {
-            self.close_connection(client_fd)?;
+            self.close_connection(fd)?;
         }
 
         Ok(())
@@ -213,23 +244,6 @@ impl Server {
                 "Connection closed - Host: {} Client fd: {}", 
                 connection.host_name, client_fd
             ), "Server");
-        }
-
-        Ok(())
-    }
-
-    fn handle_event(&mut self, event: epoll_event) -> Result<(), ServerError> {
-        let fd = event.u64 as RawFd;
-
-        if let Some(_) = self.find_host_by_fd(fd) {
-            return self.handle_new_connection(fd);
-        }
-
-        if event.events & EPOLLIN as u32 != 0 {
-            let host = self.get_host_by_name(&self.connections.get(&fd).unwrap().host_name)
-                .ok_or_else(|| ServerError::ConnectionError("Host not found".to_string()))?;
-            
-            return self.handle_request(fd, host.clone());
         }
 
         Ok(())
@@ -279,8 +293,19 @@ impl Server {
 
             // Handle events
             for event in &events[..num_events as usize] {
-                if let Err(e) = self.handle_event(*event) {
-                    self.logger.error(&format!("Event handling error: {:?}", e), "Server");
+                let fd = event.u64 as RawFd;
+
+                if let Some(_) = self.find_host_by_fd(fd) {
+                    if let Err(e) = self.handle_new_connection(fd) {
+                        self.logger.error(&format!("New connection error: {:?}", e), "Server");
+                    }
+                } else {
+                    let host = self.get_host_by_name(&self.connections.get(&fd).unwrap().host_name)
+                        .ok_or_else(|| ServerError::ConnectionError("Host not found".to_string()))?;
+                    if let Err(e) = self.handle_connection_event(fd, event.events, host.clone()) {
+                        println!("error here");
+                        self.logger.error(&format!("Connection event error: {:?}", e), "Server");
+                    }
                 }
             }
 

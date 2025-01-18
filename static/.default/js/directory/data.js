@@ -1,62 +1,27 @@
 // Generated directory structure
 export const directoryData = {
-  "/": {
+  "/home": {
     "items": [
       {
-        "name": "cgi-bin",
-        "path": "/cgi-bin",
-        "size": 4096,
-        "type": "directory"
-      },
-      {
-        "name": "home",
-        "path": "/home",
-        "size": 4096,
-        "type": "directory"
-      },
-      {
-        "name": ".default",
-        "path": "/.default",
-        "size": 4096,
-        "type": "directory"
-      },
-      {
-        "name": "error",
-        "path": "/error",
-        "size": 4096,
-        "type": "directory"
-      }
-    ],
-    "path": "/"
-  },
-  "/cgi-bin": {
-    "items": [
-      {
-        "name": "main.py",
-        "path": "/cgi-bin/main.py",
-        "size": 1798,
+        "name": "index.html",
+        "path": "/home/index.html",
+        "size": 229,
         "type": "file"
+      },
+      {
+        "name": "another",
+        "path": "/home/another",
+        "size": 4096,
+        "type": "directory"
       }
     ],
-    "path": "/cgi-bin"
+    "path": "/home"
   },
   "/.default": {
     "items": [
       {
-        "name": "directory_listing.html",
-        "path": "/.default/directory_listing.html",
-        "size": 778,
-        "type": "file"
-      },
-      {
         "name": "css",
         "path": "/.default/css",
-        "size": 4096,
-        "type": "directory"
-      },
-      {
-        "name": "js",
-        "path": "/.default/js",
         "size": 4096,
         "type": "directory"
       },
@@ -67,30 +32,64 @@ export const directoryData = {
         "type": "file"
       },
       {
+        "name": "directory_listing.html",
+        "path": "/.default/directory_listing.html",
+        "size": 778,
+        "type": "file"
+      },
+      {
         "name": "error",
         "path": "/.default/error",
+        "size": 4096,
+        "type": "directory"
+      },
+      {
+        "name": "js",
+        "path": "/.default/js",
         "size": 4096,
         "type": "directory"
       }
     ],
     "path": "/.default"
   },
-  "/home": {
+  "/test": {
+    "items": [],
+    "path": "/test"
+  },
+  "/": {
     "items": [
       {
-        "name": "another",
-        "path": "/home/another",
+        "name": ".default",
+        "path": "/.default",
         "size": 4096,
         "type": "directory"
       },
       {
-        "name": "index.html",
-        "path": "/home/index.html",
-        "size": 229,
-        "type": "file"
+        "name": "home",
+        "path": "/home",
+        "size": 4096,
+        "type": "directory"
+      },
+      {
+        "name": "test",
+        "path": "/test",
+        "size": 4096,
+        "type": "directory"
+      },
+      {
+        "name": "error",
+        "path": "/error",
+        "size": 4096,
+        "type": "directory"
+      },
+      {
+        "name": "cgi-bin",
+        "path": "/cgi-bin",
+        "size": 4096,
+        "type": "directory"
       }
     ],
-    "path": "/home"
+    "path": "/"
   },
   "/error": {
     "items": [
@@ -102,5 +101,16 @@ export const directoryData = {
       }
     ],
     "path": "/error"
+  },
+  "/cgi-bin": {
+    "items": [
+      {
+        "name": "main.py",
+        "path": "/cgi-bin/main.py",
+        "size": 1798,
+        "type": "file"
+      }
+    ],
+    "path": "/cgi-bin"
   }
 };
