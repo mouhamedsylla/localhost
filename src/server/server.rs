@@ -21,6 +21,7 @@ use crate::server::{
 };
 
 use crate::server::stream::request_stream::unifiedReader::UnifiedReader;
+use crate::server::session::session::SessionMiddleware;
 
 use libc::{
     epoll_create1, epoll_ctl, epoll_event, epoll_wait, 
@@ -39,7 +40,8 @@ pub struct Server {
     connections: HashMap<RawFd, Connection>,
     epoll_fd: RawFd,
     logger: Logger,
-    uploader: Option<Uploader>
+    uploader: Option<Uploader>,
+    session_middleware: SessionMiddleware,
 }
 
 impl Server {
@@ -52,7 +54,8 @@ impl Server {
             connections: HashMap::new(),
             epoll_fd,
             logger,
-            uploader
+            uploader,
+            session_middleware: SessionMiddleware{},
         })
     }
 
@@ -152,12 +155,34 @@ impl Server {
             .ok_or(ServerError::ConnectionError("Connection not found".to_string()))?;
         let mut should_close = false;
 
+    
+
 
         match connection.handle_event(events) {
             Ok(state) => {
                 match state {
                     ConnectionState::Complete(request) => {
                         if let Some(route) = host.get_route(&request.uri) {
+                            // precess middleware session
+                            let s = self.session_middleware.process(&request, route, host.session_manager.as_ref().unwrap());
+
+                            match s {
+                                Ok(session) => {
+                                    if let Some(s) = session {
+                                       // request.session = Some(s);
+                                    }
+                                },
+                                Err(response) => {
+                                    if let Err(e) = connection.send_response(response.to_string()) {
+                                        if e.kind() != std::io::ErrorKind::WouldBlock {
+                                            self.logger.error(&format!("Failed to send response: {}", e), "Server");
+                                            should_close = true;
+                                        }
+                                    }
+                                    return Ok(());
+                                }
+                            }
+
                             match host.route_request(&request, route, self.uploader.clone()) {
                                 Ok(mut response) => {
                                     // Add CORS and Connection headers

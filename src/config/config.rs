@@ -32,7 +32,28 @@ pub struct Route {
     pub default_page: Option<String>,
     pub directory_listing: Option<bool>,
     pub cgi: Option<CgiConfig>,
+    pub session_required: Option<bool>,
+    pub session_redirect: Option<String>,
 }
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct SessionOptionsConfig {
+    pub http_only: Option<bool>,
+    pub secure: Option<bool>,
+    pub max_age: Option<u64>,
+    pub path: Option<String>,
+    pub expires: Option<u64>,
+    pub domain: Option<String>,
+    pub same_site: Option<String>,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct SessionConfig {
+    pub enabled: Option<bool>,
+    pub name: Option<String>,
+    pub options: Option<SessionOptionsConfig>,
+}
+
 
 #[derive(Deserialize, Debug)]
 pub struct Host {
@@ -42,6 +63,7 @@ pub struct Host {
     pub routes: Option<Vec<Route>>,
     pub error_pages: Option<ErrorPages>,
     pub client_max_body_size: Option<String>,
+    pub session: Option<SessionConfig>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -160,6 +182,70 @@ impl Route {
     
 }
 
+impl SessionOptionsConfig {
+    pub fn validate(&self) -> Vec<ConfigError> {
+        let mut errors = Vec::new();
+
+        if let Some(path) = &self.path {
+            if path.is_empty() {
+                errors.push(ConfigError::Warning("Session path is empty".to_string()));
+            }
+            if !path.starts_with('/') {
+                errors.push(ConfigError::Warning("Session path must start with /".to_string()));
+            }
+        }
+
+        if let Some(domain) = &self.domain {
+            if domain.is_empty() {
+                errors.push(ConfigError::Warning("Session domain is empty".to_string()));
+            }
+        }
+
+        if let Some(same_site) = &self.same_site {
+            match same_site.to_lowercase().as_str() {
+                "strict" | "lax" | "none" => {},
+                _ => errors.push(ConfigError::Warning("Invalid same_site value. Must be 'Strict', 'Lax', or 'None'".to_string())),
+            }
+        }
+
+        if let Some(max_age) = &self.max_age {
+            if *max_age == 0 {
+                errors.push(ConfigError::Warning("Session max_age should be greater than 0".to_string()));
+            }
+        }
+
+        if let Some(expires) = &self.expires {
+            if *expires == 0 {
+                errors.push(ConfigError::Warning("Session expires should be greater than 0".to_string()));
+            }
+        }
+
+        errors
+    }
+}
+
+
+impl SessionConfig {
+    pub fn validate(&self) -> Vec<ConfigError> {
+        let mut errors = Vec::new();
+
+        if self.enabled.unwrap_or(false) {
+            match &self.name {
+                Some(name) if !name.is_empty() => {},
+                Some(_) => errors.push(ConfigError::Critical("Session cookie name is empty".to_string())),
+                None => errors.push(ConfigError::Critical("Session cookie name is required when sessions are enabled".to_string())),
+            }
+
+            if let Some(options) = &self.options {
+                errors.extend(options.validate());
+            }
+        }
+
+        errors
+    }
+}
+
+
 impl Host {
     pub fn is_valid_essential_config(&self) -> Result<(), ConfigError> {
         let mut has_valid_port = false;
@@ -220,6 +306,10 @@ impl Host {
             if !size.ends_with("k") && !size.ends_with("m") {
                 warnings.push(ConfigError::Warning("Host client_max_body_size is not in k or m".to_string()));
             }
+        }
+
+        if let Some(session_config) = &self.session {
+            warnings.extend(session_config.validate());
         }
 
         if let Some(routes) = &self.routes {
@@ -308,5 +398,15 @@ impl ServerConfig {
         }
 
         Ok(config)
+    }
+}
+
+impl Default for SessionConfig {
+    fn default() -> Self {
+        SessionConfig {
+            enabled: None,
+            name: None,
+            options: None,
+        }
     }
 }

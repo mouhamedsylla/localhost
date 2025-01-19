@@ -10,6 +10,8 @@ pub struct Route {
     pub methods: Vec<HttpMethod>,
     pub static_files: Option<ServerStaticFiles>,
     pub cgi_config: Option<CGIConfig>,
+    pub session_required: Option<bool>,
+    pub session_redirect: Option<String>,
 }
 
 impl Route {

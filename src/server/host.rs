@@ -8,7 +8,8 @@ use crate::server::handlers::handlers::{
     Handler,
     StaticFileHandler,
     FileAPIHandler,
-    CGIHandler
+    CGIHandler,
+    SessionHandler,
 };
 use crate::http::{
     body::Body,
@@ -17,6 +18,9 @@ use crate::http::{
     status::HttpStatusCode,
     header::Header
 };
+
+
+use crate::server::session::session::{SessionManager, Session};
 
 #[derive(Debug)]
 pub struct HostListener {
@@ -58,12 +62,13 @@ impl HostListener {
 }
 
 /// Represents a virtual host configuration for the server
-#[derive(Debug)]
 pub struct Host {
     pub server_address: String,
     pub server_name: String,
     pub listeners: Vec<HostListener>,
     pub routes: Vec<Route>,
+    pub session_manager: Option<SessionManager>,
+
 }
 
 /// Clone implementation for Host
@@ -74,6 +79,7 @@ impl Clone for Host {
             server_name: self.server_name.clone(),
             listeners: self.listeners.clone(),
             routes: self.routes.clone(),
+            session_manager: self.session_manager.clone(),
         }
     }
 }
@@ -84,7 +90,8 @@ impl Host {
         server_address: &str,
         server_name: &str,
         ports: Vec<String>,
-        routes: Vec<Route>, 
+        routes: Vec<Route>,
+        session_manager: Option<SessionManager>, 
     ) -> Result<Self, std::io::Error> {
         let mut listeners = Vec::new();
         for port in ports {
@@ -96,6 +103,7 @@ impl Host {
             server_name: server_name.to_string(),
             listeners,
             routes,
+            session_manager,
         })
     }
 
@@ -137,6 +145,20 @@ impl Host {
                     // Return service unavailable if uploader is not configured
                     let body = json!({
                         "message": "File upload service is not available"
+                    });
+                    Ok(Response::response_with_json(body, HttpStatusCode::ServiceUnavailable))
+                }
+            },
+
+            // Handle session requests with SessionHandler
+            (_, uri) if uri.starts_with("/api/session") => {
+                if let Some(session_manager) = &self.session_manager {
+                    let mut handler = SessionHandler::new(session_manager.clone());
+                    handler.serve_http(request)
+                        .map_err(|e| ServerError::ConnectionError(e.to_string()))
+                } else {
+                    let body = json!({
+                        "message": "Session service is not available"
                     });
                     Ok(Response::response_with_json(body, HttpStatusCode::ServiceUnavailable))
                 }

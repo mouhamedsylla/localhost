@@ -249,7 +249,7 @@ pub mod handlers {
 
             // Request handlers
             fn handle_get(&mut self, request: &Request) -> Result<Response, io::Error> {
-                if request.uri != "/api/files" {
+                if request.uri != "/api/files/list" {
                     return Ok(self.not_found_response());
                 }
 
@@ -269,7 +269,7 @@ pub mod handlers {
             }
 
             fn handle_post(&mut self, request: &Request) -> Result<Response, io::Error> {
-                if request.uri != "/api/upload" {
+                if request.uri != "/api/files/upload" {
                     return Ok(self.not_found_response());
                 }
 
@@ -316,7 +316,7 @@ pub mod handlers {
             }
 
             fn handle_delete(&mut self, request: &Request) -> Result<Response, io::Error> {
-                if !request.uri.starts_with("/api/files/") {
+                if !request.uri.starts_with("/api/files/delete") {
                     return Ok(self.not_found_response());
                 }
 
@@ -389,8 +389,112 @@ pub mod handlers {
         }
     }
 
+    pub mod session_api {
+        use super::*;
+
+        use crate::server::session::session::{Session, SessionManager};
+        use serde_json::json;
+        use crate::http::{
+            request::{Request, HttpMethod},
+            response::{Response, ResponseBuilder},
+            status::HttpStatusCode,
+            header::Header,
+            body::Body,
+        };
+
+        pub struct SessionHandler {
+            session_manager: SessionManager,
+        }
+
+        impl Handler for SessionHandler {
+            fn serve_http(&mut self, request: &Request) -> Result<Response, io::Error> {
+                match request.method {
+                    HttpMethod::POST => self.handle_create_session(request),
+                    HttpMethod::DELETE => self.handle_destroy_session(request),
+                    _ => Ok(self.method_not_allowed_response()),
+                }
+            }
+        }
+
+        impl SessionHandler {
+            pub fn new(session_manager: SessionManager) -> Self {
+                SessionHandler { session_manager }
+            }
+
+            fn handle_create_session(&self, request: &Request) -> Result<Response, io::Error> {
+                if request.uri != "/api/session/create" {
+                    return Ok(self.not_found_response());
+                }
+    
+                let (session, cookie_header) = self.session_manager.create_session();
+                self.session_manager.store.set(session.clone());
+
+                let body = Body::json(json!({
+                    "message": "Session created",
+                    "session_id": session.id
+                }));
+
+                let response_builder = self.with_session(ResponseBuilder::new(), cookie_header);
+
+                Ok(response_builder
+                    .status_code(HttpStatusCode::Ok)
+                    .body(body)
+                    .build())
+            }
+
+
+            fn handle_destroy_session(&self, request: &Request) -> Result<Response, io::Error> {
+                if request.uri != "/api/session/delete" {
+                    return Ok(self.not_found_response());
+                }
+    
+                let cookie_header = request.headers.iter().find(|h| h.name.to_string() == "cookie");
+                
+                match self.session_manager.get_session(cookie_header) {
+                    Some(session) => {
+                        let cookie_header = self.session_manager.destroy_session(&session.id);
+                        let body = json!({
+                            "message": "Session destroyed successfully",
+                            "session_id": session.id
+                        });
+    
+                        let mut response = Response::response_with_json(body, HttpStatusCode::Ok);
+                        response.headers.push(cookie_header);
+                        
+                        Ok(response)
+                    }
+                    None => Ok(Response::response_with_json(
+                        json!({"error": "Session not found"}),
+                        HttpStatusCode::NotFound
+                    ))
+                }
+            }
+
+            fn with_session(&self, response_builder: ResponseBuilder, cookie: Header) -> ResponseBuilder {
+                response_builder.header(cookie)
+            }
+
+            fn not_found_response(&self) -> Response {
+                Response::response_with_json(
+                    json!({"error": "Route not found"}),
+                    HttpStatusCode::NotFound
+                )
+            }
+
+            fn method_not_allowed_response(&self) -> Response {
+                Response::response_with_json(
+                    json!({"error": "Method not allowed"}),
+                    HttpStatusCode::MethodNotAllowed
+                )
+            }
+        }
+    }
+
+
+
     // Re-export the handlers for easier access
     pub use cgi_api::CGIHandler;
     pub use file_api::FileAPIHandler;
     pub use static_files_api::StaticFileHandler;
+    pub use session_api::SessionHandler;
 }

@@ -6,7 +6,7 @@ mod config;
 
 use server::server::Server;
 use server::errors::ServerError;
-use server::static_files;
+use server::{session, static_files};
 use crate::server::host::Host;
 use crate::server::static_files::{ServerStaticFiles, ErrorPages};
 use core::error;
@@ -18,6 +18,7 @@ use crate::server::uploader::Uploader;
 use crate::server::route::Route;
 use crate::server::cgi::CGIConfig;
 use crate::config::config::ServerConfig;
+use crate::server::session::session::{SessionManager, MemorySessionStore};
 
 
 const BANNER: &str = r#"
@@ -88,16 +89,32 @@ fn main() -> Result<(), ServerError> {
                             } else {
                                 None
                             };
+
     
-                        routes.push(Route { path: r.path.unwrap(), methods , static_files: static_files, cgi_config });
+                        routes.push(Route { 
+                            path: r.path.unwrap(), 
+                            methods , 
+                            static_files, 
+                            cgi_config, 
+                            session_required: r.session_required, 
+                            session_redirect: r.session_redirect.clone() 
+                        });
                     }
                 }
+
+                let session_manager = if let Some(config) = host_config.session {
+                        Some(SessionManager::new(config, Box::new(MemorySessionStore::new())))
+                } else {
+                    None
+                };
+                
 
                 let host = Host::new(
                     host_config.server_address.as_deref().unwrap_or(""),
                     host_config.server_name.as_deref().unwrap_or(""),
                     host_config.ports.unwrap_or_default(),
-                    routes
+                    routes,
+                    session_manager.clone(),
                 ).unwrap();
 
                 let _ = servers.add_host(host);

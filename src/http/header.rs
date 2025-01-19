@@ -85,6 +85,7 @@ pub enum HeaderName {
     // Response headers
     Server,
     StatusCode,
+    Location,
     
     // Cache headers
     ETag,
@@ -120,19 +121,19 @@ pub enum TransferEncoding {
 
 #[derive(Debug, Clone)]
 pub struct Cookie {
-    name: String,
-    value: String,
-    options: CookieOptions,
+    pub name: String,
+    pub value: String,
+    pub options: CookieOptions,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct CookieOptions {
-    http_only: bool,
-    secure: bool,
-    max_age: Option<u64>,
-    path: Option<String>,
-    expires: Option<SystemTime>,
-    domain: Option<String>,
+    pub http_only: bool,
+    pub secure: bool,
+    pub max_age: Option<u64>,
+    pub path: Option<String>,
+    pub expires: Option<SystemTime>,
+    pub domain: Option<String>,
     pub same_site: SameSitePolicy,
 }
 
@@ -192,6 +193,9 @@ impl HeaderName {
             "connection" => HeaderName::Connection,
             "date" => HeaderName::Date,
             "host" => HeaderName::Host,
+            "cookie" => HeaderName::Cookie,
+            "set-cookie" => HeaderName::SetCookie,
+            "location" => HeaderName::Location,
             "accept" => HeaderName::Accept,
             "accept-language" => HeaderName::AcceptLanguage,
             "accept-encoding" => HeaderName::AcceptEncoding,
@@ -214,6 +218,7 @@ impl HeaderName {
             HeaderName::Connection => "Connection",
             HeaderName::Cookie => "Cookie",
             HeaderName::SetCookie => "Set-Cookie",
+            HeaderName::Location => "Location",
             HeaderName::Date => "Date",
             HeaderName::Host => "Host",
             HeaderName::Accept => "Accept",

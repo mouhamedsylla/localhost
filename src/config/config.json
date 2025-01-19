@@ -5,6 +5,18 @@
       "server_name": "localhost",
       "ports": ["8080"],
       "client_body_size_limit": "10M",
+      "session": {
+        "enabled": true,
+        "name": "session_id",
+        "options": {
+          "max_age": 86400,
+          "domain": "localhost",
+          "path": "/",
+          "secure": true,
+          "http_only": true,
+          "same_site": "Lax"
+        }
+      },
       "error_pages": {
         "custom_pages": {
           "404": "error/404.html"
@@ -23,7 +35,9 @@
           "methods": ["GET", "POST", "DELETE"],
           "root": "static",
           "default_page": "index.html",
-          "directory_listing": false
+          "directory_listing": false,
+          "session_required": true,
+          "session_redirect": "/"
         }
       ]
     },
