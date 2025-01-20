@@ -278,7 +278,6 @@ pub mod handlers {
                         let mut uploaded_files = Vec::new();
 
                         for (field_name, file) in &form.files {
-                            println!("file data len: {}", file.data.len());
                             // Validate file
                             if let Some(error_response) =
                                 self.validate_upload(&file.content_type, file.data.len())
@@ -322,9 +321,9 @@ pub mod handlers {
 
                 let file_id = match request
                     .uri
-                    .strip_prefix("/api/files/")
+                    .strip_prefix("/api/files/delete/")
                     .and_then(|id| id.parse::<i32>().ok())
-                {
+                    {
                     Some(id) => id,
                     None => return Ok(self.bad_request_response("Invalid file ID")),
                 };
@@ -421,12 +420,13 @@ pub mod handlers {
                 SessionHandler { session_manager }
             }
 
-            fn handle_create_session(&self, request: &Request) -> Result<Response, io::Error> {
+            fn handle_create_session(&mut self, request: &Request) -> Result<Response, io::Error> {
                 if request.uri != "/api/session/create" {
                     return Ok(self.not_found_response());
                 }
     
                 let (session, cookie_header) = self.session_manager.create_session();
+
                 self.session_manager.store.set(session.clone());
 
                 let body = Body::json(json!({
@@ -438,12 +438,14 @@ pub mod handlers {
 
                 Ok(response_builder
                     .status_code(HttpStatusCode::Ok)
+                    .header(Header::from_str("content-type", "application/json"))
+                    .header(Header::from_str("content-length", &body.body_len().to_string()))
                     .body(body)
                     .build())
             }
 
 
-            fn handle_destroy_session(&self, request: &Request) -> Result<Response, io::Error> {
+            fn handle_destroy_session(&mut self, request: &Request) -> Result<Response, io::Error> {
                 if request.uri != "/api/session/delete" {
                     return Ok(self.not_found_response());
                 }

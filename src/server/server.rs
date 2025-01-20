@@ -164,22 +164,21 @@ impl Server {
                     ConnectionState::Complete(request) => {
                         if let Some(route) = host.get_route(&request.uri) {
                             // precess middleware session
-                            let s = self.session_middleware.process(&request, route, host.session_manager.as_ref().unwrap());
-
-                            match s {
-                                Ok(session) => {
-                                    if let Some(s) = session {
-                                       // request.session = Some(s);
-                                    }
-                                },
-                                Err(response) => {
-                                    if let Err(e) = connection.send_response(response.to_string()) {
-                                        if e.kind() != std::io::ErrorKind::WouldBlock {
-                                            self.logger.error(&format!("Failed to send response: {}", e), "Server");
-                                            should_close = true;
+                            if let Some(session_manager) = host.session_manager.as_ref() {
+                                match self.session_middleware.process(&request, route, session_manager) {
+                                    Ok(session) => {
+                                        if let Some(s) = session {
                                         }
+                                    },
+                                    Err(response) => {
+                                        if let Err(e) = connection.send_response(response.to_string()) {
+                                            if e.kind() != std::io::ErrorKind::WouldBlock {
+                                                self.logger.error(&format!("Failed to send response: {}", e), "Server");
+                                                should_close = true;
+                                            }
+                                        }
+                                        return Ok(());
                                     }
-                                    return Ok(());
                                 }
                             }
 
@@ -328,7 +327,6 @@ impl Server {
                     let host = self.get_host_by_name(&self.connections.get(&fd).unwrap().host_name)
                         .ok_or_else(|| ServerError::ConnectionError("Host not found".to_string()))?;
                     if let Err(e) = self.handle_connection_event(fd, event.events, host.clone()) {
-                        println!("error here");
                         self.logger.error(&format!("Connection event error: {:?}", e), "Server");
                     }
                 }

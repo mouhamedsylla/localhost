@@ -7,5 +7,17 @@
 </head>
 <body>
     <h1>Hello World</h1>
+    <button>Get Session</button>
 </body>
+<script>
+
+    document.querySelector('button').addEventListener('click', async (e) => {
+        e.preventDefault();
+        const response = await fetch('http://server1.home:8080/api/session/create', {
+            method: 'POST',
+        });
+        const data = await response.json();
+        console.log(data);
+    });
+</script>
 </html>

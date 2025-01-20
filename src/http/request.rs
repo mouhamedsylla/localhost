@@ -35,7 +35,6 @@ impl HttpMethod {
     
 }
 
-
 #[derive(Debug, Clone)]
 pub struct Request {
     pub method: HttpMethod,

@@ -120,15 +120,85 @@ impl Host {
     }
 
     pub fn get_route(&self, path: &str) -> Option<&Route> {
-        self.routes.iter().find(|route| { 
-            &route.path == path 
-        })
+        // Attempt direct match first
+        if let Some(route) = self.routes.iter().find(|r| r.path == path) {
+            return Some(route);
+        }
+    
+        // If not found, remove the last filename segment if it looks like a file
+        if let Some((without_file, last_segment)) = path.rsplit_once('/') {
+            // Simple heuristic: if there's a dot in the last segment, assume it's a file
+            if last_segment.contains('.') {
+                let trimmed = if without_file.is_empty() { "/" } else { without_file };
+                return self.routes.iter().find(|r| r.path == trimmed);
+            }
+        }
+
+        let path_segments: Vec<_> = path.trim_end_matches('/').split('/').collect();
+        for route in &self.routes {
+            let route_segments: Vec<_> = route.path.trim_end_matches('/').split('/').collect();
+            
+            // Skip if segment counts differ significantly 
+            if path_segments.len() != route_segments.len() {
+                continue;
+            }
+    
+            let mut is_dynamic_match = true;
+            for (p, r) in path_segments.iter().zip(route_segments.iter()) {
+                // If route segment is placeholder (":something"), skip exact check
+                if !r.starts_with(':') && r != p {
+                    is_dynamic_match = false;
+                    break;
+                }
+            }
+    
+            if is_dynamic_match {
+                return Some(route);
+            }
+        }
+    
+        None
     }
 
+    pub fn add_session_api(&mut self) {
+        // Route for creating a session
+        let create_session_route = Route {
+            path: "/api/session/create".to_string(),
+            methods: vec![HttpMethod::POST],
+            session_required: Some(false),
+            redirect: None,
+            session_redirect: None,
+            static_files: None,
+            cgi_config: None,
+        };
+    
+        // Route for deleting a session
+        let delete_session_route = Route {
+            path: "/api/session/delete".to_string(),
+            methods: vec![HttpMethod::DELETE],
+            session_required: Some(true),
+            session_redirect: None,
+            redirect: None,
+            static_files: None,
+            cgi_config: None,
+        };
+    
+        // Add routes to this host
+        self.add_route(create_session_route);
+        self.add_route(delete_session_route);
+    }
+
+
     pub fn route_request(&self, request: &Request, route: &Route, uploader: Option<Uploader>) -> Result<Response, ServerError> {
+        // if let Some(redirect) = &route.redirect {
+        //     println!("Redirecting to: {}", redirect);
+        //     let response = self.redirect(&redirect);
+        //     return Ok(response);
+        // }
+
         match (&request.method, &request.uri) {
             // Handle file API endpoints with FileApiHandler
-            (_, uri) if uri.starts_with("/api") => {
+            (_, uri) if uri.starts_with("/api/files") => {
                 if let Some(uploader) = uploader {
                     // Create and use the file API handler
                     let handler_result = FileAPIHandler::new(uploader.clone());
@@ -200,6 +270,14 @@ impl Host {
             .build())    
             }
         }
+    }
+
+    fn redirect(&self, redirect: &str) -> Response {
+        Response::new(
+            HttpStatusCode::MovedPermanently,
+            vec![Header::from_str("location", redirect)],
+            None
+        )
     }
 
 }

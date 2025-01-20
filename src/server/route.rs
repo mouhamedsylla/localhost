@@ -10,6 +10,7 @@ pub struct Route {
     pub methods: Vec<HttpMethod>,
     pub static_files: Option<ServerStaticFiles>,
     pub cgi_config: Option<CGIConfig>,
+    pub redirect: Option<String>,
     pub session_required: Option<bool>,
     pub session_redirect: Option<String>,
 }
@@ -17,5 +18,5 @@ pub struct Route {
 impl Route {
     pub fn is_method_allowed(&self, method: &HttpMethod) -> bool {
         self.methods.contains(method)
-    }
+    }   
 }

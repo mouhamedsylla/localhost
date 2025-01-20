@@ -31,6 +31,7 @@ pub struct Route {
     pub root: Option<String>,
     pub default_page: Option<String>,
     pub directory_listing: Option<bool>,
+    pub redirect: Option<String>,
     pub cgi: Option<CgiConfig>,
     pub session_required: Option<bool>,
     pub session_redirect: Option<String>,

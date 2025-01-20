@@ -1,8 +1,8 @@
 {
   "servers": [
     {
-      "server_address": "127.0.0.1",
-      "server_name": "localhost",
+      "server_address": "127.0.0.2",
+      "server_name": "server1",
       "ports": ["8080"],
       "client_body_size_limit": "10M",
       "session": {
@@ -10,9 +10,9 @@
         "name": "session_id",
         "options": {
           "max_age": 86400,
-          "domain": "localhost",
+          "domain": "server1.home",
           "path": "/",
-          "secure": true,
+          "secure": false,
           "http_only": true,
           "same_site": "Lax"
         }
@@ -28,7 +28,8 @@
           "methods": ["GET", "POST", "DELETE"],
           "root": "static",
           "default_page": "index.html",
-          "directory_listing": false
+          "directory_listing": false,
+          "redirect": "/home"
         },
         {
           "path": "/home",
@@ -42,17 +43,29 @@
       ]
     },
     {
-      "server_address": "0.0.0.0",
-      "server_name": "localserver",
+      "server_address": "127.0.0.3",
+      "server_name": "server2",
       "ports": ["8082"],
       "client_body_size_limit": "10M",
       "routes": [
         {
           "path": "/",
-          "methods": ["GET", "POST", "DELETE"],
+          "methods": ["GET"],
           "root": "example",
           "default_page": "index.html",
           "directory_listing": false
+        },
+        {
+          "path": "/api/files/list",
+          "methods": ["GET"]
+        },
+        {
+          "path": "/api/files/upload",
+          "methods": ["POST"]
+        },
+        {
+          "path": "/api/files/delete/:id",
+          "methods": ["DELETE"]
         }
       ]
     }

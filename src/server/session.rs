@@ -1,10 +1,9 @@
 pub mod session {
     use super::*;
-
+    use colored::*;
     use uuid::Uuid;
-    use std::{collections::HashMap};
+    use std::{collections::HashMap, sync::Arc};
     use std::time::{SystemTime, Duration};
-
 
     #[derive(Debug, Clone)]
     pub struct Session {
@@ -14,38 +13,54 @@ pub mod session {
         pub expires_at: Option<SystemTime>,
     }
 
-    // Session store trait
-    pub trait SessionStore: Send + Sync{
+    impl Session {
+        pub fn new(max_age: Option<u64>) -> Self {
+            let now = SystemTime::now();
+            let expires_at = max_age.map(|age| now + Duration::from_secs(age));
+            Session {
+                id: String::new(),
+                data: HashMap::new(),
+                created_at: now,
+                expires_at,
+            }
+        }
+    
+        pub fn is_expired(&self) -> bool {
+            self.expires_at.map_or(false, |expires| SystemTime::now() > expires)
+        }
+
+        pub fn set_id(&mut self, id: String) {
+            self.id = id;
+        }
+    }
+
+    pub trait SessionStore: Send + Sync {
         fn get(&self, id: &str) -> Option<Session>;
         fn set(&self, session: Session);
         fn delete(&self, id: &str);
         fn cleanup_expired(&self);
         fn clone_box(&self) -> Box<dyn SessionStore>;
-    }
-
-    impl Session {
-        pub fn new(max_age: Option<u64>) -> Self {
-            let now = SystemTime::now();
-            let expires_at = if let Some(max_age) = max_age {
-                Some(now + Duration::from_secs(max_age))
-            } else {
-                None
-            };
-            Session {
-                id: Uuid::new_v4().to_string(),
-                data: HashMap::new(),
-                created_at: now,
-                expires_at
+        fn list_sessions(&self) -> Vec<Session>;
+        
+        fn print_sessions(&self) {
+            println!("\n{}", "Current Sessions:".cyan().bold());
+            for session in self.list_sessions() {
+                println!("{}", "═".repeat(50).cyan());
+                println!("Session ID: {}", session.id.yellow());
+                println!("Created at: {}", session.created_at
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs());
+                if let Some(expires) = session.expires_at {
+                    println!("Expires at: {}", expires
+                        .duration_since(SystemTime::UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs());
+                }
+                println!("Data: {:?}", session.data);
             }
+            println!("{}\n", "═".repeat(50).cyan());
         }
-    
-        pub fn is_expired(&self) -> bool {
-            if let Some(expires_at) = self.expires_at {
-                return SystemTime::now() > expires_at;
-            }
-            false 
-        }
-    
     }
 
     impl Clone for Box<dyn SessionStore> {
@@ -57,27 +72,33 @@ pub mod session {
     pub mod store_session {
         use super::*;
 
-        #[derive(Debug)]
+        #[derive(Debug, Clone)]
         pub struct MemorySessionStore {
-            sessions: std::sync::RwLock<HashMap<String, Session>>,
+            sessions: Arc<std::sync::RwLock<HashMap<String, Session>>>,
         }
 
         impl MemorySessionStore {
             pub fn new() -> Self {
                 MemorySessionStore {
-                    sessions: std::sync::RwLock::new(HashMap::new()),
+                    sessions: Arc::new(std::sync::RwLock::new(HashMap::new())),
                 }
             }
         }
 
         impl SessionStore for MemorySessionStore {
             fn get(&self, id: &str) -> Option<Session> {
-                let sessions = self.sessions.read().unwrap();
-                sessions.get(id).cloned()
+                let sessions = self.sessions.read().unwrap();                
+                let session = sessions.get(id).cloned();
+                match &session {
+                    Some(s) => println!("  -> Session found: {:?}", s),
+                    None => println!("  -> No session found with this ID"),
+                }
+                
+                session
             }
         
             fn set(&self, session: Session) {
-                let mut sessions = self.sessions.write().unwrap();
+                let mut sessions = self.sessions.write().unwrap();                
                 sessions.insert(session.id.clone(), session);
             }
         
@@ -92,20 +113,22 @@ pub mod session {
             }
 
             fn clone_box(&self) -> Box<dyn SessionStore> {
-                Box::new(Self::new())
+                Box::new(self.clone())
+            }
+
+            fn list_sessions(&self) -> Vec<Session> {
+                let sessions = self.sessions.read().unwrap();
+                sessions.values().cloned().collect()
             }
         }
     }
 
     pub mod session_manager {
         use std::default;
-
         use super::*;
-
         use crate::config::config::SessionConfig;
         use crate::http::header::{Header, Cookie, CookieOptions, SameSitePolicy};
 
-        // Session manager
         #[derive(Clone)]
         pub struct SessionManager {
             pub config: SessionConfig,
@@ -119,6 +142,7 @@ pub mod session {
 
             pub fn create_session(&self) -> (Session, Header) {
                 let option_config = self.config.options.clone();
+                let id = generate_id();
                 let cookie = if let Some(opts) = option_config {
                     let options = CookieOptions {
                         http_only: opts.http_only.unwrap_or(false),
@@ -127,50 +151,55 @@ pub mod session {
                         path: opts.path,
                         expires: opts.expires.map(|secs| SystemTime::now() + Duration::from_secs(secs)),
                         domain: opts.domain,
-                        same_site: if let Some(policy) = opts.same_site {
-                            match policy.to_ascii_lowercase().as_str() {
-                                "strict" => SameSitePolicy::Strict,
-                                "lax" => SameSitePolicy::Lax,
-                                "none" => SameSitePolicy::None,
-                                _ => SameSitePolicy::Strict
-                            }
-                        } else {
-                            SameSitePolicy::Strict
+                        same_site: match opts.same_site.as_deref().map(str::to_ascii_lowercase).as_deref() {
+                            Some("strict") => SameSitePolicy::Strict,
+                            Some("lax") => SameSitePolicy::Lax,
+                            Some("none") => SameSitePolicy::None,
+                            _ => SameSitePolicy::Strict,
                         }
                     };
-                    Cookie::with_options("", self.config.name.as_deref().unwrap_or(""), options)
+                    Cookie::with_options(self.config.name.as_deref().unwrap_or(""), &id, options)
                 } else {
-                    Cookie::new("", self.config.name.as_deref().unwrap_or(""))
+                    Cookie::new(self.config.name.as_deref().unwrap_or(""), &id)
                 };
 
-                let session = Session::new(cookie.options.max_age);
+                let mut session = Session::new(cookie.options.max_age);
+                session.set_id(id.clone());
+
+                self.store.set(session.clone());
                 let header = Header::from_str("set-cookie", &cookie.to_string());
+                self.store.print_sessions();
+                
                 (session, header)
             }
 
             pub fn get_session(&self, cookie_header: Option<&Header>) -> Option<Session> {
                 if let Some(header) = cookie_header {
                     if let Some(cookie) = Cookie::parse(&header.value.value) {
-                        if cookie.name == self.config.name.as_deref().unwrap_or("") {
-                            if let Some(mut session) = self.store.get(&cookie.value) {
-                                if !session.is_expired() {
-                                    self.store.set(session.clone());
-                                    return Some(session);
-                                }
-                                self.store.delete(&cookie.value);
+                        if let Some(session) = self.store.get(&cookie.value) {
+                            if !session.is_expired() {
+                                return Some(session);
                             }
+                            self.store.delete(&cookie.value);
                         }
                     }
                 }
                 None
             }
 
-            pub fn destroy_session(&self, session_id: &str) -> Header {
+            pub fn destroy_session(&self, session_id: &str) -> Header {                
                 self.store.delete(session_id);
                 let mut options = CookieOptions::default();
                 options.max_age = Some(0);
-                let cookie = Cookie::with_options(&self.config.name.as_deref().unwrap_or(""), "", options);
-                Header::from_str("set-cookie", &cookie.to_string())
+                let cookie = Cookie::with_options(
+                    self.config.name.as_deref().unwrap_or(""),
+                    "",
+                    options
+                );
+                let header = Header::from_str("set-cookie", &cookie.to_string());
+                
+                self.store.print_sessions();
+                header
             }
         }
 
@@ -184,10 +213,8 @@ pub mod session {
         }
     }
 
-
     pub mod session_middleware {
         use super::*;
-        use crate::http::response;
         use crate::http::{
             request::Request,
             response::Response,
@@ -231,15 +258,10 @@ pub mod session {
             }
 
             fn redirect(&self, redirect: &str) -> Response {
-                let body = Body::text("Unauthorized: Session required");
                 Response::new(
-                    HttpStatusCode::Unauthorized,
-                    vec![
-                        Header::from_str("content-Type", "text/plain"),
-                        Header::from_str("content-length", &body.body_len().to_string()),
-                        Header::from_str("location", redirect),
-                    ],
-                    Some(body)
+                    HttpStatusCode::Found,
+                    vec![Header::from_str("location", redirect)],
+                    None
                 )
             }
 
@@ -248,14 +270,17 @@ pub mod session {
                 Response::new(
                     HttpStatusCode::Unauthorized,
                     vec![
-                        Header::from_str("content-Type", "text/plain"),
+                        Header::from_str("content-type", "text/plain"),
                         Header::from_str("content-length", &body.body_len().to_string()),
                     ],
                     Some(body)
                 )
             }
-
         }
+    }
+
+    fn generate_id() -> String {
+        Uuid::new_v4().to_string()
     }
 
     pub use session_manager::SessionManager;

@@ -157,7 +157,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Amélioration de loadFiles avec meilleure gestion des erreurs
     async function loadFiles() {
         try {
-            const response = await fetch('http://localhost:8082/api/files');
+            const response = await fetch('http://server2.home:8082/api/files/list');
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
@@ -198,7 +198,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             console.log("Length: ", formData.length);
             
-            const response = await fetch('http://localhost:8082/api/upload', {
+            const response = await fetch('http://server2.home:8082/api/files/upload', {
                 method: 'POST',
                 body: formData
             });
@@ -233,7 +233,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Amélioration de deleteFile
     window.deleteFile = async (fileId) => {
         try {
-            const response = await fetch(`http://localhost:8082/api/files/${fileId}`, {
+            const response = await fetch(`http://server2.home:8082/api/files/delete/${fileId}`, {
                 method: 'DELETE'
             });
             const rep_json = await response.json();

@@ -13,6 +13,7 @@ pub struct Response {
     pub body: Option<Body>
 }
 
+#[derive(Debug)]
 pub struct ResponseBuilder { 
     version: String,
     status_code: HttpStatusCode,

@@ -71,9 +71,11 @@ fn main() -> Result<(), ServerError> {
                         } else {
                             None
                         };
+
+
     
                         let results = ServerStaticFiles::new(
-                            PathBuf::from(r.root.unwrap()), r.default_page, r.directory_listing.unwrap_or(false), error_pages);
+                            PathBuf::from(r.root.unwrap_or("".to_string())), r.default_page, r.directory_listing.unwrap_or(false), error_pages);
     
                         let static_files = match results {
                             Ok(files) => Some(files),
@@ -90,12 +92,15 @@ fn main() -> Result<(), ServerError> {
                                 None
                             };
 
+                        println!("Redirect: {:?}", r.redirect);
+
     
                         routes.push(Route { 
                             path: r.path.unwrap(), 
                             methods , 
                             static_files, 
-                            cgi_config, 
+                            cgi_config,
+                            redirect: r.redirect.clone(), 
                             session_required: r.session_required, 
                             session_redirect: r.session_redirect.clone() 
                         });
@@ -109,13 +114,17 @@ fn main() -> Result<(), ServerError> {
                 };
                 
 
-                let host = Host::new(
+                let mut host = Host::new(
                     host_config.server_address.as_deref().unwrap_or(""),
                     host_config.server_name.as_deref().unwrap_or(""),
                     host_config.ports.unwrap_or_default(),
                     routes,
                     session_manager.clone(),
                 ).unwrap();
+
+                if session_manager.is_some() {
+                    host.add_session_api();
+                }
 
                 let _ = servers.add_host(host);
 
