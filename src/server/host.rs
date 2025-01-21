@@ -1,5 +1,6 @@
 use std::net::{TcpListener, TcpStream};
 use std::os::unix::io::{AsRawFd, RawFd};
+use std::path::Path;
 use crate::server::route::Route;
 use crate::server::errors::ServerError;
 use crate::server::uploader::Uploader;
@@ -70,19 +71,6 @@ pub struct Host {
 
 }
 
-/// Clone implementation for Host
-impl Clone for Host {
-    fn clone(&self) -> Host {
-        Host {
-            server_address: self.server_address.clone(),
-            server_name: self.server_name.clone(),
-            listeners: self.listeners.clone(),
-            routes: self.routes.clone(),
-            session_manager: self.session_manager.clone(),
-        }
-    }
-}
-
 /// Core Host implementation
 impl Host {
     pub fn new(
@@ -122,13 +110,6 @@ impl Host {
         if let Some(route) = self.routes.iter().find(|r| r.path == path) {
             return Some(route);
         }
-    
-        if let Some((without_file, last_segment)) = path.rsplit_once('/') {
-            if last_segment.contains('.') {
-                let trimmed = if without_file.is_empty() { "/" } else { without_file };
-                return self.routes.iter().find(|r| r.path == trimmed);
-            }
-        }
 
         let path_segments: Vec<_> = path.trim_end_matches('/').split('/').collect();
         for route in &self.routes {
@@ -149,6 +130,19 @@ impl Host {
             if is_dynamic_match {
                 return Some(route);
             }
+        }
+
+        let file_route = self.routes.iter().find(|r| {
+            if let Some(files) = r.static_files.as_ref() {
+                let path_file = Path::new(path.trim_start_matches("/"));
+                return files.is_directory_contain_file(path_file);
+            } else {
+                return false;
+            }
+        });
+
+        if file_route.is_some() {
+            return file_route;
         }
     
         None

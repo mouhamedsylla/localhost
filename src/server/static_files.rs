@@ -68,12 +68,10 @@ impl ServerStaticFiles {
     pub fn serve_static(&mut self, path: &str) -> io::Result<(Vec<u8>, Option<mime>, FileStatus)> {
         let defaultPath = self.directory.join(".default/index.html");
 
-        println!("Path: {}", path);
 
         let path = path.trim_start_matches('/');
         let full_path = self.directory.join(path);
 
-        println!("Full path: {:?}", full_path);
 
         if full_path.is_dir() {
             if self.allow_directory_listing {
@@ -93,6 +91,13 @@ impl ServerStaticFiles {
         }
 
         self.serve_file(&full_path)
+    }
+
+    pub fn is_directory_contain_file(&self, path: &Path) -> bool {
+        if self.directory.join(path).exists() {
+            return true;
+        }
+        self.directory.join(path).is_file()
     }
 }
 

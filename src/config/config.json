@@ -28,7 +28,7 @@
           "methods": ["GET", "POST", "DELETE"],
           "root": "static",
           "default_page": "index.html",
-          "directory_listing": false,
+          "directory_listing": true,
           "redirect": "/home"
         },
         {
@@ -36,7 +36,7 @@
           "methods": ["GET", "POST", "DELETE"],
           "root": "static",
           "default_page": "index.html",
-          "directory_listing": false,
+          "directory_listing": true,
           "session_required": true,
           "session_redirect": "/"
         }

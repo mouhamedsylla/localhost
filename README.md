@@ -1,306 +1,185 @@
-# Localhost
+# 🚀 Localhost: Because Every Server Deserves Some Style! 
 
-# 🚀 Serveur Web Modulaire en Rust
+## 🌟 Welcome to the Party!
 
-Bienvenue dans ce projet de serveur web moderne et performant écrit en Rust ! Ce serveur a été conçu pour être modulaire, efficace et facile à étendre.
-
-## 📑 Table des matières
-
-- [Architecture](#architecture)
-- [Fonctionnalités](#fonctionnalités)
-- [Composants principaux](#composants-principaux)
-- [Flux de fonctionnement](#flux-de-fonctionnement)
-- [Configuration](#configuration)
-- [Utilisation](#utilisation)
-- [Contribuer](#contribuer)
-
-## 🏗 Architecture
-
-Le serveur est construit autour d'une architecture événementielle utilisant epoll, permettant une excellente performance même sous forte charge. Voici le diagramme de flux principal :
-
-```mermaid
-flowchart TD
-    %% Main Entry Points
-    Start([Client Request]) --> Epoll{Epoll Event Loop}
-    
-    %% Event Types
-    Epoll -->|New Connection| NC[Handle New Connection]
-    Epoll -->|Data Available| DR[Read Request Data]
-    Epoll -->|Timeout Check| TC[Check Connection Timeouts]
-    
-    %% New Connection Flow
-    NC --> FindHost{Find Host by FD}
-    FindHost -->|Not Found| Error1[Log Error]
-    FindHost -->|Found| Accept[Accept Connection]
-    Accept --> SetNB[Set Non-Blocking]
-    SetNB --> AddEpoll[Add to Epoll]
-    AddEpoll --> Store[Store Connection]
-    
-    %% Request Processing Flow
-    DR --> Parse{Parse Request}
-    Parse -->|Invalid| Close1[Close Connection]
-    Parse -->|Valid| Route{Route Request}
-    
-    %% Routing Logic
-    Route -->|/api/*| API[File API Handler]
-    Route -->|Static File| Static[Static File Handler]
-    Route -->|CGI Script| CGI[CGI Handler]
-    Route -->|Not Found| NF[Not Found Response]
-    
-    %% API Handler Flow
-    API --> ApiMethod{HTTP Method}
-    ApiMethod -->|GET| ListFiles[List Files]
-    ApiMethod -->|POST| Upload[Handle Upload]
-    ApiMethod -->|DELETE| Delete[Delete File]
-    
-    %% Static Handler Flow
-    Static --> CheckFile{Check File}
-    CheckFile -->|Exists| ServeFile[Serve File]
-    CheckFile -->|Not Found| NF
-    
-    %% CGI Handler Flow
-    CGI --> ValidScript{Valid Script?}
-    ValidScript -->|Yes| Exec[Execute Script]
-    ValidScript -->|No| Error2[Error Response]
-    Exec --> ParseOut[Parse Output]
-    
-    %% Response Handling
-    ServeFile --> Send[Send Response]
-    Upload --> Send
-    Delete --> Send
-    ListFiles --> Send
-    ParseOut --> Send
-    Error2 --> Send
-    NF --> Send
-    
-    %% Connection Management
-    Send --> KeepAlive{Keep-Alive?}
-    KeepAlive -->|Yes| Epoll
-    KeepAlive -->|No| Close2[Close Connection]
-    
-    %% Timeout Management
-    TC --> CheckTime{Timeout?}
-    CheckTime -->|Yes| Close3[Close Connection]
-    CheckTime -->|No| Epoll
-```
-
-## ✨ Fonctionnalités
-
-- **Virtual Hosting** : Support de plusieurs domaines sur un même serveur
-- **Gestion de fichiers statiques** : Serveur de fichiers optimisé
-- **Support CGI** : Exécution de scripts dynamiques
-- **API de gestion de fichiers** : Upload, listing et suppression via REST API
-- **Keep-Alive** : Connexions persistantes pour de meilleures performances
-- **Logging intégré** : Suivi détaillé des opérations
-- **Gestion des timeouts** : Protection contre les connexions zombies
-
-## 🧩 Composants principaux
-
-### Server
-Le cœur du système qui :
-- Gère la boucle epoll principale
-- Maintient les connexions actives
-- Dispatche les événements aux bons handlers
-- Assure la surveillance des timeouts
-
-### Host
-Gère la configuration des hôtes virtuels avec :
-- Support multi-ports
-- Configuration des routes
-
-- Gestion des listeners
-
-### Connection
-Gère les connexions individuelles :
-- Buffer de lecture optimisé
-- Parse des requêtes HTTP
-- Gestion du keep-alive
-
-### Handlers
-Trois types de handlers spécialisés :
-
-1. **StaticFileHandler**
-   - Sert les fichiers statiques
-   - Gestion du cache et des types MIME
-   - Support des répertoires
-
-2. **CGIHandler**
-   - Exécution sécurisée de scripts
-   - Gestion des variables d'environnement
-   - Parse des sorties CGI
-
-3. **FileAPIHandler**
-   - API RESTful pour la gestion de fichiers
-   - Upload multipart
-   - Listing et suppression de fichiers
-
-## 🔄 Flux de fonctionnement
-
-1. **Réception d'une requête**
-   - La boucle epoll détecte une nouvelle connexion
-   - Le serveur accepte et configure la socket
-   - La connexion est ajoutée au système de surveillance
-
-2. **Traitement de la requête**
-   - Lecture des données via un buffer optimisé
-   - Parse de la requête HTTP
-   - Identification du handler approprié
-
-3. **Routing**
-   - Matching de l'URL avec les routes configurées
-   - Sélection du handler approprié
-   - Transmission de la requête
-
-4. **Génération de la réponse**
-   - Traitement par le handler spécialisé
-   - Construction de la réponse HTTP
-   - Envoi au client
-
-5. **Gestion de la connexion**
-   - Vérification du keep-alive
-   - Mise à jour des timers
-   - Fermeture si nécessaire
-
-## ⚙️ Configuration
-
-Configuration via un fichier YAML :
-
-```yaml
-hosts:
-  - server_name: example.com
-    address: "127.0.0.1"
-    ports: ["80", "8080"]
-    routes:
-      - path: "/static"
-        static_files:
-          root: "./public"
-      - path: "/cgi-bin"
-        cgi:
-          interpreter: "/usr/bin/python3"
-          script_dir: "./scripts"
-```
-
-## 🚀 Utilisation
-
-Pour démarrer le serveur :
-
-```bash
-cargo run --release -- --config config.yml
-```
-
-## 🤝 Contribuer
-
-Les contributions sont les bienvenues ! Voici comment participer :
-
-1. Fork le projet
-2. Créez une nouvelle branche (`git checkout -b feature/awesome-feature`)
-3. Committez vos changements (`git commit -am 'Add awesome feature'`)
-4. Push sur la branche (`git push origin feature/awesome-feature`)
-5. Ouvrez une Pull Request
+Hey there, awesome developer! You've just stumbled upon **Localhost**, the HTTP server that makes serving web content as fun as playing with LEGO blocks (but with more ports and fewer foot injuries). Whether you're building a small personal project or a large-scale application, Localhost is here to make your life easier, faster, and more stylish.
 
 ---
 
-📝 **Note** : Ce projet est en développement actif. N'hésitez pas à ouvrir des issues pour des bugs ou des suggestions d'amélioration !
+## 🎭 What's This Magic All About?
 
+**Localhost** is a high-performance, customizable HTTP server built with **Rust** that combines power, flexibility, and a touch of humor. It’s designed to handle everything from serving static files to executing CGI scripts, managing file uploads, and handling sessions. Think of it as your very own digital butler who juggles requests with ease and style.
 
+---
 
+## 🎮 Let's Get This Show on the Road!
 
-```mermaid
-stateDiagram-v2
-    [*] --> EventLoop : Démarrage du serveur
+### Installation
 
-    state EventLoop {
-        [*] --> WaitForEvents : epoll_wait()
-        
-        WaitForEvents --> HandleEvent : Événement disponible
-        
-        state HandleEvent {
-            [*] --> CheckEventType
-            
-            state AcceptConnection {
-                [*] --> CheckNewConnection
-                CheckNewConnection --> TryAccept : Nouvelle connexion TCP
-                CheckNewConnection --> NoMoreConnections : Plus de connexions
-                
-                TryAccept --> InitializeConnection
-                InitializeConnection --> WaitHTTPRequest
-                
-                NoMoreConnections --> [*]
-            }
-            
-            state HTTPRequestHandling {
-                [*] --> ParseHTTPRequest
-                
-                ParseHTTPRequest --> CheckHTTPMethod
-                
-                state CheckHTTPMethod {
-                    [*] --> HandleGET : Méthode GET
-                    [*] --> HandlePOST : Méthode POST
-                    [*] --> HandlePUT : Méthode PUT
-                    [*] --> HandleDELETE : Méthode DELETE
-                    [*] --> HandlePATCH : Méthode PATCH
-                }
-                
-                state HandleGET {
-                    [*] --> RouteGET
-                    RouteGET --> PrepareResponse
-                    PrepareResponse --> SendResponse
-                    SendResponse --> [*]
-                }
-                
-                state HandlePOST {
-                    [*] --> ParseBody
-                    ParseBody --> ValidateData
-                    ValidateData --> ProcessCreate
-                    ProcessCreate --> PrepareResponse
-                    PrepareResponse --> SendResponse
-                    SendResponse --> [*]
-                }
-                
-                state HandlePUT {
-                    [*] --> ParseBody
-                    ParseBody --> ValidateData
-                    ValidateData --> ProcessUpdate
-                    ProcessUpdate --> PrepareResponse
-                    PrepareResponse --> SendResponse
-                    SendResponse --> [*]
-                }
-                
-                state HandleDELETE {
-                    [*] --> RouteResource
-                    RouteResource --> ValidateDelete
-                    ValidateDelete --> ProcessDelete
-                    ProcessDelete --> PrepareResponse
-                    PrepareResponse --> SendResponse
-                    SendResponse --> [*]
-                }
-                
-                state HandlePATCH {
-                    [*] --> ParseBody
-                    ParseBody --> ValidateData
-                    ValidateData --> ProcessPartialUpdate
-                    ProcessPartialUpdate --> PrepareResponse
-                    PrepareResponse --> SendResponse
-                    SendResponse --> [*]
-                }
-                
-                SendResponse --> CloseConnection
-                CloseConnection --> [*]
-            }
-            
-            CheckEventType --> HTTPRequestHandling : Données à lire
-        }
-        
-        HandleEvent --> WaitForEvents : Retour à l'attente
-    }
-    
-    EventLoop --> [*] : Arrêt du serveur
+Getting started with Localhost is as easy as pie. Here’s how you can clone, build, and run it:
 
-    note right of HTTPRequestHandling
-        Traitement non-bloquant:
-        - Parse rapide de la requête
-        - Routing sans attente
-        - Réponse immédiate
-        - Gestion des différents verbes HTTP
-    end note
+```bash
+# Clone our fantastic repository
+git clone https://github.com/yourusername/Localhost.git
+
+# Step into the magic zone
+cd Localhost
+
+# Build it like you mean it!
+cargo build --release
 ```
+
+### Running the Server
+
+Once built, you can run Localhost in several ways depending on your needs:
+
+```bash
+# The simple way
+./Localhost
+
+# The "I'm a pro" way (with a custom config file)
+./Localhost -c config.json
+
+# The "show me everything" way (with warnings enabled)
+./Localhost --warn  # Because warnings are like spoilers for server problems!
+```
+
+---
+
+## 🎨 The Art of Configuration
+
+Localhost is highly configurable via a simple JSON configuration file. Here’s a sample configuration to get you started:
+
+```json
+{
+  "servers": [
+    {
+      "server_address": "127.0.0.2",
+      "server_name": "server1",  // Give it a cool name!
+      "ports": ["8080"],         // Ports are like doors to your server party
+      "client_body_size_limit": "10M",  // Because size matters
+      "session": {
+        "enabled": true,
+        "name": "session_id",    // Keep it classy
+        "options": {
+          "max_age": 86400,      // One day of fun!
+          "domain": "server1.home",
+          "path": "/",
+          "secure": false,       // Living on the edge (just kidding, secure it in production!)
+          "http_only": true,
+          "same_site": "Lax"
+        }
+      }
+    }
+  ]
+}
+```
+
+---
+
+## 🎪 Routes: Where the Magic Happens
+
+Routes in Localhost are defined in the configuration file and allow you to specify how different paths are handled. Here’s an example:
+
+```json
+{
+  "path": "/home",               // The VIP entrance
+  "methods": ["GET", "POST", "DELETE"],  // The party tricks we know
+  "root": "static",             // Where we keep the good stuff
+  "default_page": "index.html", // The welcome mat
+  "directory_listing": true,    // Let's show off a bit
+  "session_required": true,     // No ticket, no entry!
+  "session_redirect": "/"       // The walk of shame
+}
+```
+
+---
+
+## 🎯 API Endpoints: What Can You Do?
+
+Localhost exposes a powerful API to handle various tasks. Here’s a breakdown of the endpoints and what they allow you to do:
+
+### **Static File Handling**
+- **`GET /static/*`**  
+  Serve static files (HTML, CSS, JS, images, etc.) from the specified directory. Perfect for hosting your frontend assets.
+
+---
+
+### **File Upload and Management**
+- **`GET /api/files/list`**  
+  List all uploaded files with their metadata (ID, name, size, etc.).
+  
+- **`POST /api/files/upload`**  
+  Upload one or multiple files to the server. Supports multipart form data.
+
+- **`DELETE /api/files/:id`**  
+  Delete a specific file by its ID. Useful for cleaning up unused resources.
+
+---
+
+### **CGI Script Execution**
+- **`GET /cgi-bin/*`**  
+  Execute CGI scripts located in the specified directory. Ideal for dynamic content generation.
+
+---
+
+### **Session Management**
+- **`POST /api/session/create`**  
+  Create a new session for a user. Returns a session ID that can be used for subsequent requests.
+
+- **`DELETE /api/session/delete`**  
+  Destroy an existing session. Useful for logging users out or cleaning up expired sessions.
+
+---
+
+## 🎭 Warning Mode: For the Drama Lovers
+
+Run Localhost with the `--warn` flag, and it will become your most honest critic. It’ll catch things like:
+
+- **Duplicate server names**: *"Hey, those server names are twins!"*
+- **Overlapping routes**: *"Your routes are playing musical chairs!"*
+- **Missing error pages**: *"404 page missing - now that's a real 404!"*
+
+---
+
+## 🌈 The Directory Fashion Show
+
+Here’s the trendy directory layout for Localhost:
+
+```
+Localhost/
+├── config.json          # The master plan
+├── static/             # The public gallery
+├── error/              # Where mistakes look good
+└── example/            # Show and tell
+```
+
+---
+
+## 🎪 Performance: Speed is Our Middle Name
+
+Localhost is like a caffeinated cheetah wearing rocket boots - it's seriously fast! Thanks to:
+
+- **Keep-alive connections** (because goodbyes are overrated)
+- **Non-blocking I/O** (we don't like waiting either)
+- **Smart session management** (we remember the cool kids)
+
+---
+
+## 🎉 The Grand Finale
+
+Remember: Every great server starts with a single request. Make it count!
+
+**Made with ❤️, 🦀 Rust, and a sprinkle of server magic.**
+
+---
+
+## 🛠️ Need Help? Found a Bug? Want to Contribute?
+
+We’re like a pineapple on pizza - always ready to create controversy! Open an issue or submit a PR. We’d love to hear from you!
+
+**Licensed under MIT** - because sharing is caring! 🎈
+
+---
+
+P.S. If you're still reading this, you're officially awesome! Now go build something incredible with Localhost! 🚀

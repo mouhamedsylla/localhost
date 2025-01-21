@@ -386,6 +386,8 @@ impl Host {
             for route in routes {
                 warnings.extend(route.validate());
             }
+        } else {
+            warnings.push(ConfigError::Warning("Host routes is undefined".to_string()));
         }
 
         if let Some(error_pages) = &self.error_pages {
@@ -453,8 +455,7 @@ impl ServerConfig {
                         }
                     }
                     false
-                }
-                
+                }    
             }
         });
 
