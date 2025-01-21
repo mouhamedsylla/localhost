@@ -19,7 +19,6 @@ use crate::http::{
     header::Header
 };
 
-
 use crate::server::session::session::{SessionManager, Session};
 
 #[derive(Debug)]
@@ -120,14 +119,11 @@ impl Host {
     }
 
     pub fn get_route(&self, path: &str) -> Option<&Route> {
-        // Attempt direct match first
         if let Some(route) = self.routes.iter().find(|r| r.path == path) {
             return Some(route);
         }
     
-        // If not found, remove the last filename segment if it looks like a file
         if let Some((without_file, last_segment)) = path.rsplit_once('/') {
-            // Simple heuristic: if there's a dot in the last segment, assume it's a file
             if last_segment.contains('.') {
                 let trimmed = if without_file.is_empty() { "/" } else { without_file };
                 return self.routes.iter().find(|r| r.path == trimmed);
@@ -138,14 +134,12 @@ impl Host {
         for route in &self.routes {
             let route_segments: Vec<_> = route.path.trim_end_matches('/').split('/').collect();
             
-            // Skip if segment counts differ significantly 
             if path_segments.len() != route_segments.len() {
                 continue;
             }
     
             let mut is_dynamic_match = true;
             for (p, r) in path_segments.iter().zip(route_segments.iter()) {
-                // If route segment is placeholder (":something"), skip exact check
                 if !r.starts_with(':') && r != p {
                     is_dynamic_match = false;
                     break;
@@ -190,12 +184,7 @@ impl Host {
 
 
     pub fn route_request(&mut self, request: &Request, route: &Route, uploader: Option<Uploader>) -> Result<Response, ServerError> {
-        // if let Some(redirect) = &route.redirect {
-        //     println!("Redirecting to: {}", redirect);
-        //     let response = self.redirect(&redirect);
-        //     return Ok(response);
-        // }
-
+        
         match (&request.method, &request.uri) {
             // Handle file API endpoints with FileApiHandler
             (_, uri) if uri.starts_with("/api/files") => {

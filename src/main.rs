@@ -21,6 +21,7 @@ use crate::config::config::ServerConfig;
 use crate::server::session::session::{SessionManager, MemorySessionStore};
 
 
+
 const BANNER: &str = r#"
 ╔═══════════════════════════════════════════════════════════════════════════╗
 ║                                                                           ║
@@ -44,6 +45,12 @@ fn display_banner() {
 }
 
 fn main() -> Result<(), ServerError> {
+    let mut active_warn_opt = false;
+    let args: Vec<String> = std::env::args().collect();
+
+    if args.contains(&String::from("--warn")) {
+        active_warn_opt = true;
+    };
 
     print!("{esc}[2J{esc}[1;1H", esc = 27 as char);
     display_banner();
@@ -51,7 +58,7 @@ fn main() -> Result<(), ServerError> {
     let uploader = Uploader::new(Path::new("example/upload").to_path_buf());
 
     let mut servers = Server::new(Some(uploader)).unwrap();
-    let load_config = ServerConfig::load_and_validate();
+    let load_config = ServerConfig::load_and_validate(active_warn_opt);
 
     match load_config {
         Ok(server_config) => {
@@ -87,13 +94,10 @@ fn main() -> Result<(), ServerError> {
     
                         let cgi_config = 
                             if let Some(cgi) = r.cgi {
-                                Some(CGIConfig::new(cgi.scrpit_path))
+                                Some(CGIConfig::new(cgi.script_path))
                             } else {
                                 None
                             };
-
-                        println!("Redirect: {:?}", r.redirect);
-
     
                         routes.push(Route { 
                             path: r.path.unwrap(), 

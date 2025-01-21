@@ -11,12 +11,13 @@ use crate::server::route;
 
 const ALLOWED_EXTENSIONS: [&str; 1] = ["py"];
 const ALLOWED_STATUS: [&str; 8] = ["400", "403", "404", "405", "413", "500", "502", "503"];
+const ALLOWED_HTTP_METHODS: [&str; 3] = ["GET", "POST", "DELETE"];
 const MODULE : &str = "CONFIG";
 
 #[derive(Deserialize, Debug)]
 pub struct CgiConfig {
     pub extension: String,
-    pub scrpit_path: String,
+    pub script_path: String,
 }
 
 #[derive(Deserialize, Debug)]
@@ -93,40 +94,49 @@ impl CgiConfig {
     pub fn validate(&self) -> Vec<ConfigError> {
         let mut errors = Vec::new();
 
+        // Validate extension
         if self.extension.is_empty() {
             errors.push(ConfigError::Warning("CgiConfig extension is empty".to_string()));
+        } else if !ALLOWED_EXTENSIONS.contains(&self.extension.as_str()) {
+            errors.push(ConfigError::Warning(format!(
+                "CgiConfig extension '{}' is not allowed. Allowed extensions: {:?}",
+                self.extension, ALLOWED_EXTENSIONS
+            )));
         }
-        if self.scrpit_path.is_empty() {
-            errors.push(ConfigError::Warning("CgiConfig interpreter_path is empty".to_string()));
+
+        // Validate script path
+        if self.script_path.is_empty() {
+            errors.push(ConfigError::Warning("CgiConfig script_path is empty".to_string()));
+        } else if !Path::new(&self.script_path).exists() {
+            errors.push(ConfigError::Warning(format!(
+                "CgiConfig script_path '{}' does not exist",
+                self.script_path
+            )));
         }
-        if !ALLOWED_EXTENSIONS.contains(&self.extension.as_str()) {
-            errors.push(ConfigError::Warning("CgiConfig extension is not allowed".to_string()));
-        }
+
         errors
     }
 }
+
 
 impl ErrorPages {
     pub fn validate(&self) -> Vec<ConfigError> {
         let mut errors = Vec::new();
 
         for (status, path) in &self.custom_pages {
+            // Validate status code
             if status.is_empty() {
                 errors.push(ConfigError::Warning("ErrorPages status is empty".to_string()));
-            }
-            if path.is_empty() {
-                errors.push(ConfigError::Warning("ErrorPages path is empty".to_string()));
-            }
-            if !Path::new(path).exists() {
-                errors.push(ConfigError::Warning("ErrorPages path does not exist".to_string()));
-            }
-
-            if status.parse::<u16>().is_err() {
-                errors.push(ConfigError::Warning("ErrorPages status is not a number".to_string()));
-            }
-
-            if !ALLOWED_STATUS.contains(&status.as_str()) {
-                errors.push(ConfigError::Warning("ErrorPages status is not allowed".to_string()));
+            } else if let Err(_) = status.parse::<u16>() {
+                errors.push(ConfigError::Warning(format!(
+                    "ErrorPages status '{}' is not a valid HTTP status code",
+                    status
+                )));
+            } else if !ALLOWED_STATUS.contains(&status.as_str()) {
+                errors.push(ConfigError::Warning(format!(
+                    "ErrorPages status '{}' is not allowed. Allowed status codes: {:?}",
+                    status, ALLOWED_STATUS
+                )));
             }
         }
         errors
@@ -138,86 +148,145 @@ impl Route {
     pub fn validate(&self) -> Vec<ConfigError> {
         let mut errors = Vec::new();
 
-        if let Some(path) = &self.path {
-            if path.is_empty() {
-                errors.push(ConfigError::Warning("Route path is empty".to_string()));
+        // Validate path
+        match &self.path {
+            None => errors.push(ConfigError::Warning("Route path is undefined".to_string())),
+            Some(path) if path.is_empty() => {
+                errors.push(ConfigError::Warning("Route path is empty".to_string()))
             }
-        } else {
-            errors.push(ConfigError::Warning("Route is undefined".to_string()));
-        }
-        if let Some(path_start) = &self.path {
-            if !path_start.starts_with("/") {
-                errors.push(ConfigError::Warning("Route path does not start with /".to_string()));
+            Some(path) if !path.starts_with('/') => {
+                errors.push(ConfigError::Warning(format!(
+                    "Route path '{}' must start with '/'",
+                    path
+                )))
             }
+            _ => {}
         }
-        if let Some(method) = &self.methods {
-            if method.is_empty() {
-                errors.push(ConfigError::Warning("Route methods is empty".to_string()));
+
+        // Validate methods
+        match &self.methods {
+            None => errors.push(ConfigError::Warning("Route methods is undefined".to_string())),
+            Some(methods) if methods.is_empty() => {
+                errors.push(ConfigError::Warning("Route methods is empty".to_string()))
             }
-        } else {
-            errors.push(ConfigError::Warning("Route methods is undefined".to_string()));
-        }
-        if let Some(root) = &self.root {
-            if root.is_empty() {
-                errors.push(ConfigError::Warning("Route root is empty".to_string()));
-            }
-        } else {
-            errors.push(ConfigError::Warning("Route root is undefined".to_string()));
-        }
-        if let Some(root) = &self.root {
-            if !Path::new(root).exists() {
-                errors.push(ConfigError::Warning("Route root does not exist".to_string()));
-            }
-        }
-        if self.default_page.is_some() {
-            let default_page = self.default_page.as_ref().unwrap();
-            if !Path::new(default_page).exists() {
-                errors.push(ConfigError::Warning("Route default_page does not exist".to_string()));
+            Some(methods) => {
+                for method in methods {
+                    if !ALLOWED_HTTP_METHODS.contains(&method.as_str()) {
+                        errors.push(ConfigError::Warning(format!(
+                            "Invalid HTTP method '{}'. Allowed methods: {:?}",
+                            method, ALLOWED_HTTP_METHODS
+                        )));
+                    }
+                }
             }
         }
-        if let Some(cgi) = &self.cgi {
-            errors.append(&mut cgi.validate());
+
+        // Validate root directory
+        match &self.root {
+            None => errors.push(ConfigError::Warning("Route root is undefined".to_string())),
+            Some(root) if root.is_empty() => {
+                errors.push(ConfigError::Warning("Route root is empty".to_string()))
+            }
+            Some(root) if !Path::new(root).exists() => {
+                errors.push(ConfigError::Warning(format!(
+                    "Route root directory '{}' does not exist",
+                    root
+                )))
+            }
+            _ => {}
         }
+
+        // Validate default page if specified
+        if let Some(ref page) = self.default_page {
+            if !Path::new(page).exists() {
+                errors.push(ConfigError::Warning(format!(
+                    "Route default_page '{}' does not exist",
+                    page
+                )));
+            }
+        }
+
+        // Validate redirect if specified
+        if let Some(redirect) = &self.redirect {
+            if redirect.is_empty() {
+                errors.push(ConfigError::Warning("Route redirect URL is empty".to_string()));
+            } else if !redirect.starts_with('/') && !redirect.starts_with("http") {
+                errors.push(ConfigError::Warning(format!(
+                    "Route redirect '{}' must start with '/' or 'http'",
+                    redirect
+                )));
+            }
+        }
+
+        // Validate session redirect if required
+        if self.session_required.unwrap_or(false) {
+            if let Some(redirect) = &self.session_redirect {
+                if redirect.is_empty() {
+                    errors.push(ConfigError::Warning(
+                        "Session redirect URL is empty but session is required".to_string(),
+                    ));
+                }
+            } else {
+                errors.push(ConfigError::Warning(
+                    "Session redirect is required when session_required is true".to_string(),
+                ));
+            }
+        }
+
+        // Validate CGI configuration if present
+        if let Some(ref cgi) = self.cgi {
+            errors.extend(cgi.validate());
+        }
+
         errors
     }
-    
 }
 
 impl SessionOptionsConfig {
     pub fn validate(&self) -> Vec<ConfigError> {
         let mut errors = Vec::new();
 
+        // Validate path only if defined
         if let Some(path) = &self.path {
             if path.is_empty() {
                 errors.push(ConfigError::Warning("Session path is empty".to_string()));
-            }
-            if !path.starts_with('/') {
-                errors.push(ConfigError::Warning("Session path must start with /".to_string()));
+            } else if !path.starts_with('/') {
+                errors.push(ConfigError::Warning(format!(
+                    "Session path '{}' must start with '/'",
+                    path
+                )));
             }
         }
 
+        // Validate domain only if defined
         if let Some(domain) = &self.domain {
             if domain.is_empty() {
                 errors.push(ConfigError::Warning("Session domain is empty".to_string()));
             }
         }
 
+        // Validate same_site only if defined
         if let Some(same_site) = &self.same_site {
             match same_site.to_lowercase().as_str() {
-                "strict" | "lax" | "none" => {},
-                _ => errors.push(ConfigError::Warning("Invalid same_site value. Must be 'Strict', 'Lax', or 'None'".to_string())),
+                "strict" | "lax" | "none" => {}
+                _ => errors.push(ConfigError::Warning(format!(
+                    "Invalid same_site value '{}'. Must be 'Strict', 'Lax', or 'None'",
+                    same_site
+                ))),
             }
         }
 
-        if let Some(max_age) = &self.max_age {
-            if *max_age == 0 {
-                errors.push(ConfigError::Warning("Session max_age should be greater than 0".to_string()));
+        // Validate max_age only if defined
+        if let Some(max_age) = self.max_age {
+            if max_age == 0 {
+                errors.push(ConfigError::Warning("Session max_age must be greater than 0".to_string()));
             }
         }
 
-        if let Some(expires) = &self.expires {
-            if *expires == 0 {
-                errors.push(ConfigError::Warning("Session expires should be greater than 0".to_string()));
+        // Validate expires only if defined
+        if let Some(expires) = self.expires {
+            if expires == 0 {
+                errors.push(ConfigError::Warning("Session expires must be greater than 0".to_string()));
             }
         }
 
@@ -328,7 +397,7 @@ impl Host {
 }
 
 impl ServerConfig {
-    pub fn load_and_validate() -> Result<ServerConfig, ConfigError> {
+    pub fn load_and_validate(with_warn: bool) -> Result<ServerConfig, ConfigError> {
         let logger = Logger::new(LogLevel::DEBUG);
 
         let config_content = fs::read_to_string("./src/config/config.json")
@@ -359,10 +428,12 @@ impl ServerConfig {
                             for warn in warnings {
                                 match warn {
                                     ConfigError::Critical(msg) => {
-                                        logger.warn(&msg, MODULE);
+                                        logger.error(&msg, &format!("{} - {}", MODULE, host.server_name.clone().unwrap_or("".to_string())));
                                     },
                                     ConfigError::Warning(msg) => {
-                                        logger.error(&msg, MODULE);
+                                        if with_warn {
+                                            logger.warn(&msg, &format!("{} - {}", MODULE, host.server_name.clone().unwrap_or("".to_string())));
+                                        }
                                     }
                                 }
                             }
@@ -373,10 +444,12 @@ impl ServerConfig {
                 Err(e) => {
                     match e {
                         ConfigError::Critical(msg) => {
-                            logger.error(&msg, MODULE);
+                            logger.error(&msg, &format!("{} - {}", MODULE, host.server_name.clone().unwrap_or("".to_string())));
                         },
                         ConfigError::Warning(msg) => {
-                            logger.warn(&msg, MODULE);
+                            if with_warn {
+                                logger.warn(&msg, &format!("{} - {}", MODULE, host.server_name.clone().unwrap_or("".to_string())));
+                            }
                         }
                     }
                     false

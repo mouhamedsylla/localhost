@@ -159,7 +159,6 @@ pub mod session {
 
                 self.store.set(session.clone());
                 let header = Header::from_str("set-cookie", &cookie.to_string());
-                self.store.print_sessions();
                 
                 (session, header)
             }
@@ -167,7 +166,6 @@ pub mod session {
             pub fn get_session(&mut self, cookie_header: Option<&Header>) -> Option<Session> {
                 if let Some(header) = cookie_header {
                     if let Some(cookie) = Cookie::parse(&header.value.value) {
-                        self.store.print_sessions();
                         if let Some(session) = self.store.get(&cookie.value) {
                             if !session.is_expired() {
                                 return Some(session);

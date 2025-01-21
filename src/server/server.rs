@@ -160,12 +160,11 @@ impl Server {
                     ConnectionState::Complete(request) => {
                         let host = &mut self.hosts[host_index];
                         if let Some(route) = host.get_route(&request.uri).cloned() {
-                            // Process session middleware avec une référence mutable au host
+
                             if let Some(session_manager) = host.session_manager.as_mut() {
                                 match self.session_middleware.process(&request, &route, session_manager) {
                                     Ok(session) => {
                                         if let Some(s) = session {
-                                            // Traiter la session si nécessaire
                                         }
                                     },
                                     Err(response) => {
@@ -182,7 +181,6 @@ impl Server {
 
                             match host.route_request(&request, &route, self.uploader.clone()) {
                                 Ok(mut response) => {
-                                    // Le reste du traitement de la réponse reste identique
                                     let connection_header = if connection.keep_alive && want_keep_alive(request.clone()) {
                                         "keep-alive"
                                     } else {
@@ -320,7 +318,6 @@ impl Server {
                         self.logger.error(&format!("New connection error: {:?}", e), "Server");
                     }
                 } else {
-                    // Récupérer l'index du host au lieu du host lui-même
                     let host_name = self.connections.get(&fd)
                         .map(|conn| conn.host_name.clone())
                         .ok_or_else(|| ServerError::ConnectionError("Connection not found".to_string()))?;
