@@ -401,11 +401,11 @@ pub mod handlers {
             body::Body,
         };
 
-        pub struct SessionHandler {
-            session_manager: SessionManager,
+        pub struct SessionHandler<'a> {
+            session_manager: &'a mut SessionManager,
         }
 
-        impl Handler for SessionHandler {
+        impl<'a> Handler for SessionHandler<'a> {
             fn serve_http(&mut self, request: &Request) -> Result<Response, io::Error> {
                 match request.method {
                     HttpMethod::POST => self.handle_create_session(request),
@@ -415,8 +415,8 @@ pub mod handlers {
             }
         }
 
-        impl SessionHandler {
-            pub fn new(session_manager: SessionManager) -> Self {
+        impl<'a> SessionHandler<'a> {
+            pub fn new(session_manager: &'a mut SessionManager) -> Self {
                 SessionHandler { session_manager }
             }
 

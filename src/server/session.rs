@@ -34,11 +34,11 @@ pub mod session {
         }
     }
 
-    pub trait SessionStore: Send + Sync {
+    pub trait SessionStore {
         fn get(&self, id: &str) -> Option<Session>;
-        fn set(&self, session: Session);
-        fn delete(&self, id: &str);
-        fn cleanup_expired(&self);
+        fn set(&mut self, session: Session);
+        fn delete(&mut self, id: &str);
+        fn cleanup_expired(&mut self);
         fn clone_box(&self) -> Box<dyn SessionStore>;
         fn list_sessions(&self) -> Vec<Session>;
         
@@ -74,42 +74,33 @@ pub mod session {
 
         #[derive(Debug, Clone)]
         pub struct MemorySessionStore {
-            sessions: Arc<std::sync::RwLock<HashMap<String, Session>>>,
+            sessions: HashMap<String, Session>
         }
 
         impl MemorySessionStore {
             pub fn new() -> Self {
                 MemorySessionStore {
-                    sessions: Arc::new(std::sync::RwLock::new(HashMap::new())),
+                    sessions: HashMap::new()
                 }
             }
         }
 
         impl SessionStore for MemorySessionStore {
+
             fn get(&self, id: &str) -> Option<Session> {
-                let sessions = self.sessions.read().unwrap();                
-                let session = sessions.get(id).cloned();
-                match &session {
-                    Some(s) => println!("  -> Session found: {:?}", s),
-                    None => println!("  -> No session found with this ID"),
-                }
-                
-                session
+                self.sessions.get(id).cloned()
             }
-        
-            fn set(&self, session: Session) {
-                let mut sessions = self.sessions.write().unwrap();                
-                sessions.insert(session.id.clone(), session);
+
+            fn set(&mut self, session: Session) {
+                self.sessions.insert(session.id.clone(), session);
             }
-        
-            fn delete(&self, id: &str) {
-                let mut sessions = self.sessions.write().unwrap();
-                sessions.remove(id);
+
+            fn delete(&mut self, id: &str) {
+                self.sessions.remove(id);
             }
-        
-            fn cleanup_expired(&self) {
-                let mut sessions = self.sessions.write().unwrap();
-                sessions.retain(|_, session| !session.is_expired());
+
+            fn cleanup_expired(&mut self) {
+                self.sessions.retain(|_, session| !session.is_expired());
             }
 
             fn clone_box(&self) -> Box<dyn SessionStore> {
@@ -117,10 +108,10 @@ pub mod session {
             }
 
             fn list_sessions(&self) -> Vec<Session> {
-                let sessions = self.sessions.read().unwrap();
-                sessions.values().cloned().collect()
+                self.sessions.values().cloned().collect()
             }
-        }
+         }
+
     }
 
     pub mod session_manager {
@@ -140,7 +131,7 @@ pub mod session {
                 SessionManager { config, store }
             }
 
-            pub fn create_session(&self) -> (Session, Header) {
+            pub fn create_session(&mut self) -> (Session, Header) {
                 let option_config = self.config.options.clone();
                 let id = generate_id();
                 let cookie = if let Some(opts) = option_config {
@@ -173,9 +164,10 @@ pub mod session {
                 (session, header)
             }
 
-            pub fn get_session(&self, cookie_header: Option<&Header>) -> Option<Session> {
+            pub fn get_session(&mut self, cookie_header: Option<&Header>) -> Option<Session> {
                 if let Some(header) = cookie_header {
                     if let Some(cookie) = Cookie::parse(&header.value.value) {
+                        self.store.print_sessions();
                         if let Some(session) = self.store.get(&cookie.value) {
                             if !session.is_expired() {
                                 return Some(session);
@@ -187,7 +179,7 @@ pub mod session {
                 None
             }
 
-            pub fn destroy_session(&self, session_id: &str) -> Header {                
+            pub fn destroy_session(&mut self, session_id: &str) -> Header {                
                 self.store.delete(session_id);
                 let mut options = CookieOptions::default();
                 options.max_age = Some(0);
@@ -228,7 +220,7 @@ pub mod session {
 
         impl SessionMiddleware {
 
-            pub fn process(&self, req: &Request, route: &Route, current_manager: &SessionManager) -> Result<Option<Session>, Response> {
+            pub fn process(&self, req: &Request, route: &Route, current_manager: &mut SessionManager) -> Result<Option<Session>, Response> {
                 if let Some(required) = &route.session_required {
                     if !required {
                         return Ok(None);

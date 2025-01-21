@@ -149,25 +149,23 @@ impl Server {
         Ok(())
     }
 
-
-    fn handle_connection_event(&mut self, fd: RawFd, events: u32, host: Host) -> Result<(), ServerError> {
+    fn handle_connection_event(&mut self, fd: RawFd, events: u32, host_index: usize) -> Result<(), ServerError> {
         let connection = self.connections.get_mut(&fd)
             .ok_or(ServerError::ConnectionError("Connection not found".to_string()))?;
         let mut should_close = false;
-
-    
-
 
         match connection.handle_event(events) {
             Ok(state) => {
                 match state {
                     ConnectionState::Complete(request) => {
-                        if let Some(route) = host.get_route(&request.uri) {
-                            // precess middleware session
-                            if let Some(session_manager) = host.session_manager.as_ref() {
-                                match self.session_middleware.process(&request, route, session_manager) {
+                        let host = &mut self.hosts[host_index];
+                        if let Some(route) = host.get_route(&request.uri).cloned() {
+                            // Process session middleware avec une référence mutable au host
+                            if let Some(session_manager) = host.session_manager.as_mut() {
+                                match self.session_middleware.process(&request, &route, session_manager) {
                                     Ok(session) => {
                                         if let Some(s) = session {
+                                            // Traiter la session si nécessaire
                                         }
                                     },
                                     Err(response) => {
@@ -182,9 +180,9 @@ impl Server {
                                 }
                             }
 
-                            match host.route_request(&request, route, self.uploader.clone()) {
+                            match host.route_request(&request, &route, self.uploader.clone()) {
                                 Ok(mut response) => {
-                                    // Add CORS and Connection headers
+                                    // Le reste du traitement de la réponse reste identique
                                     let connection_header = if connection.keep_alive && want_keep_alive(request.clone()) {
                                         "keep-alive"
                                     } else {
@@ -229,7 +227,6 @@ impl Server {
                         connection.keep_alive = want_keep_alive(request);
                         should_close = !connection.keep_alive;
                     },
-
                     ConnectionState::AwaitingRequest => {},
                     ConnectionState::Error(error) => {
                         self.logger.error(&error, "Server");
@@ -238,20 +235,19 @@ impl Server {
                 }
             }
             Err(e) => {
-                // Only treat non-WouldBlock errors as actual errors
                 if e.kind() != std::io::ErrorKind::WouldBlock {
                     self.logger.error(&format!("Connection error: {}", e), "Server");
                     should_close = true;
                 }
             }
         }
+
         if should_close {
             self.close_connection(fd)?;
         }
 
         Ok(())
     }
-
 
     fn close_connection(&mut self, client_fd: RawFd) -> Result<(), ServerError> {
         unsafe {
@@ -306,7 +302,7 @@ impl Server {
                     self.epoll_fd,
                     events.as_mut_ptr(),
                     MAX_EVENTS as i32,
-                    1000 // Poll every second for timeouts
+                    1000
                 )
             };
 
@@ -324,9 +320,16 @@ impl Server {
                         self.logger.error(&format!("New connection error: {:?}", e), "Server");
                     }
                 } else {
-                    let host = self.get_host_by_name(&self.connections.get(&fd).unwrap().host_name)
+                    // Récupérer l'index du host au lieu du host lui-même
+                    let host_name = self.connections.get(&fd)
+                        .map(|conn| conn.host_name.clone())
+                        .ok_or_else(|| ServerError::ConnectionError("Connection not found".to_string()))?;
+                    
+                    let host_index = self.hosts.iter()
+                        .position(|h| h.server_name == host_name)
                         .ok_or_else(|| ServerError::ConnectionError("Host not found".to_string()))?;
-                    if let Err(e) = self.handle_connection_event(fd, event.events, host.clone()) {
+
+                    if let Err(e) = self.handle_connection_event(fd, event.events, host_index) {
                         self.logger.error(&format!("Connection event error: {:?}", e), "Server");
                     }
                 }

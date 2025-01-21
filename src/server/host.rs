@@ -189,7 +189,7 @@ impl Host {
     }
 
 
-    pub fn route_request(&self, request: &Request, route: &Route, uploader: Option<Uploader>) -> Result<Response, ServerError> {
+    pub fn route_request(&mut self, request: &Request, route: &Route, uploader: Option<Uploader>) -> Result<Response, ServerError> {
         // if let Some(redirect) = &route.redirect {
         //     println!("Redirecting to: {}", redirect);
         //     let response = self.redirect(&redirect);
@@ -222,8 +222,8 @@ impl Host {
 
             // Handle session requests with SessionHandler
             (_, uri) if uri.starts_with("/api/session") => {
-                if let Some(session_manager) = &self.session_manager {
-                    let mut handler = SessionHandler::new(session_manager.clone());
+                if let Some(session_manager) = self.session_manager.as_mut() {
+                    let mut handler = SessionHandler::new(session_manager);
                     handler.serve_http(request)
                         .map_err(|e| ServerError::ConnectionError(e.to_string()))
                 } else {
