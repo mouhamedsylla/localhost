@@ -2,7 +2,7 @@
   "servers": [
     {
       "server_address": "127.0.0.2",
-      "server_name": "server1",
+      "server_name": "server1.home",
       "ports": ["8080"],
       "client_body_size_limit": "10M",
       "session": {
@@ -44,7 +44,7 @@
     },
     {
       "server_address": "127.0.0.3",
-      "server_name": "server2",
+      "server_name": "server2.home",
       "ports": ["8082"],
       "client_body_size_limit": "10M",
       "routes": [

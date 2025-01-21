@@ -4,6 +4,8 @@ mod http;
 mod server;
 mod config;
 
+use std::fs::{OpenOptions};
+use std::io::{Write, BufRead, BufReader};
 use server::server::Server;
 use server::errors::ServerError;
 use server::{session, static_files};
@@ -17,6 +19,7 @@ use crate::http::request::HttpMethod;
 use crate::server::uploader::Uploader;
 use crate::server::route::Route;
 use crate::server::cgi::CGIConfig;
+use crate::server::logger::{Logger, LogLevel};
 use crate::config::config::ServerConfig;
 use crate::server::session::session::{SessionManager, MemorySessionStore};
 
@@ -43,6 +46,29 @@ fn display_banner() {
     let current_time = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
     println!("{}", BANNER.replace("{current_time}", &current_time));
 }
+
+fn update_hosts_file(server_name: &str, ip_address: &str) -> Result<(), std::io::Error> {
+    let hosts_path = "/etc/hosts";
+    let hosts_file = OpenOptions::new().read(true).write(true).open(hosts_path)?;
+    let logger = Logger::new(LogLevel::INFO);
+
+    let reader = BufReader::new(&hosts_file);
+    let entry_exists = reader
+        .lines()
+        .filter_map(Result::ok)
+        .any(|line| line.contains(server_name));
+
+    if !entry_exists {
+        let mut file = OpenOptions::new().append(true).open(hosts_path)?;
+        writeln!(file, "{}      {}", ip_address, server_name)?;
+        logger.info(&format!("Added '{}' to /etc/hosts with IP address '{}'", server_name, ip_address), "INIT");
+    } else {
+        logger.warn(&format!("The entry '{}' already exists in /etc/hosts", server_name), "INIT");
+    }
+
+    Ok(())
+}
+
 
 fn main() -> Result<(), ServerError> {
     let mut active_warn_opt = false;
@@ -128,6 +154,10 @@ fn main() -> Result<(), ServerError> {
 
                 if session_manager.is_some() {
                     host.add_session_api();
+                }
+
+                if let Some(ip) = host_config.server_address {
+                    update_hosts_file(host_config.server_name.as_deref().unwrap_or(""), &ip).unwrap();
                 }
 
                 let _ = servers.add_host(host);
