@@ -35,16 +35,28 @@ const BANNER: &str = r#"
 ║   ███████╗╚██████╔╝╚██████╗██║  ██║███████╗██║  ██║╚██████╔╝███████║ ██║  ║
 ║   ╚══════╝ ╚═════╝  ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝ ╚═╝  ║
 ║                                                                           ║
-║   Server Status: Running on http://localhost                              ║
-║   Time: {current_time}                                               ║
-║   Environment: Development                                                ║
-║                                                                           ║
+║   🚀 Server Initialization Details                                        ║
+║   • Timestamp:     {current_time}                                    ║
+║   • Environment:   {environment}                                            ║
+║   • Mode:          {mode}                                                  ║
+║   • Hosts:         {host_count}                                                      ║
+║   • Upload Dir:    {upload_dir}                                         ║
 ╚═══════════════════════════════════════════════════════════════════════════╝
 "#;
 
-fn display_banner() {
+fn display_banner(host_count: usize, upload_dir: &str, warn: bool) {
     let current_time = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
-    println!("{}", BANNER.replace("{current_time}", &current_time));
+    let environment = option_env!("ENV").unwrap_or("Development");
+    let mode = if warn { "Debug" } else { "Release" };
+
+    let banner = BANNER
+        .replace("{current_time}", &current_time)
+        .replace("{environment}", environment)
+        .replace("{mode}", mode)
+        .replace("{host_count}", &host_count.to_string())
+        .replace("{upload_dir}", upload_dir);
+
+    println!("{}", banner);
 }
 
 fn update_hosts_file(server_name: &str, ip_address: &str) -> Result<(), std::io::Error> {
@@ -71,6 +83,8 @@ fn update_hosts_file(server_name: &str, ip_address: &str) -> Result<(), std::io:
 
 
 fn main() -> Result<(), ServerError> {
+    print!("{esc}[2J{esc}[1;1H", esc = 27 as char);
+    
     let mut active_warn_opt = false;
     let args: Vec<String> = std::env::args().collect();
 
@@ -78,13 +92,13 @@ fn main() -> Result<(), ServerError> {
         active_warn_opt = true;
     };
 
-    print!("{esc}[2J{esc}[1;1H", esc = 27 as char);
-    display_banner();
     
     let uploader = Uploader::new(Path::new("example/upload").to_path_buf());
 
-    let mut servers = Server::new(Some(uploader)).unwrap();
+    let mut servers = Server::new(Some(uploader.clone())).unwrap();
     let load_config = ServerConfig::load_and_validate(active_warn_opt);
+
+    let mut host_count = 0;
 
     match load_config {
         Ok(server_config) => {
@@ -161,12 +175,16 @@ fn main() -> Result<(), ServerError> {
                 }
 
                 let _ = servers.add_host(host);
+                host_count += 1;
 
             }
+            
+           // let upload_dir = uploader.get_upload_dir();
+            display_banner(host_count, &uploader.get_upload_dir(), active_warn_opt);
         }
         Err(e) => {
             return Err(ServerError::ConfigError(e));
-        }
+        }  
     }
 
     servers.run()

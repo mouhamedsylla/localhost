@@ -26,7 +26,7 @@ pub struct ErrorPages {
 pub struct ServerStaticFiles {
     pub directory: PathBuf,
     index: Option<String>,
-    allow_directory_listing: bool,
+    pub allow_directory_listing: bool,
     error_pages: Option<ErrorPages>,
     status: FileStatus,
 }

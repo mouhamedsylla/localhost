@@ -5,6 +5,7 @@ use crate::server::route::Route;
 use crate::server::errors::ServerError;
 use crate::server::uploader::Uploader;
 use serde_json::json;
+use crate::server::logger::{Logger, LogLevel};
 use crate::server::handlers::handlers::{
     Handler,
     StaticFileHandler,
@@ -54,8 +55,9 @@ impl HostListener {
     }
 
     pub fn accept_connection(&self) -> std::io::Result<TcpStream> {
+        let logger = Logger::new(LogLevel::INFO);
         let (stream, addr) = self.listener.accept()?;
-        println!("Connection from: {}", addr);
+        logger.info(&format!("Accepted connection from {}", addr), "HostListener");
         stream.set_nonblocking(true)?;
         Ok(stream)
     }
@@ -68,7 +70,7 @@ pub struct Host {
     pub listeners: Vec<HostListener>,
     pub routes: Vec<Route>,
     pub session_manager: Option<SessionManager>,
-
+    pub logger: Logger,
 }
 
 /// Core Host implementation
@@ -81,6 +83,8 @@ impl Host {
         session_manager: Option<SessionManager>, 
     ) -> Result<Self, std::io::Error> {
         let mut listeners = Vec::new();
+        let logger = Logger::new(LogLevel::INFO);
+
         for port in ports {
             listeners.push(HostListener::new(port, server_address.to_string()));
         }
@@ -91,6 +95,7 @@ impl Host {
             listeners,
             routes,
             session_manager,
+            logger,
         })
     }
 
@@ -178,7 +183,17 @@ impl Host {
 
 
     pub fn route_request(&mut self, request: &Request, route: &Route, uploader: Option<Uploader>) -> Result<Response, ServerError> {
-        
+        if request.uri == route.path {
+            if let Some(redirect) = &route.redirect {
+                if let Some(listing) = &route.static_files {
+                    if !listing.is_directory_contain_file(Path::new(&listing.directory.join(&request.uri.trim_start_matches("/")))) {
+                        self.logger.info(&format!("Redirecting to {}", redirect), "Host");
+                        return Ok(self.redirect(&redirect));
+                    }
+                }
+            }
+        }
+
         match (&request.method, &request.uri) {
             // Handle file API endpoints with FileApiHandler
             (_, uri) if uri.starts_with("/api/files") => {

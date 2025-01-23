@@ -16,7 +16,7 @@ pub struct File {
 #[derive(Debug, Clone)]
 pub struct Uploader {
     database: Vec<File>,
-    upload_dir: PathBuf,
+    pub upload_dir: PathBuf,
 }
 
 impl Uploader {
@@ -141,6 +141,10 @@ impl Uploader {
             }
             counter += 1;
         }
+    }
+
+    pub fn get_upload_dir(&self) -> String {
+        self.upload_dir.to_string_lossy().into_owned()
     }
 
 
