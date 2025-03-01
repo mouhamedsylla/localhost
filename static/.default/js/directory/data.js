@@ -14,16 +14,16 @@ export const directoryData = {
   "/home": {
     "items": [
       {
-        "name": "index.html",
-        "path": "/home/index.html",
-        "size": 229,
-        "type": "file"
-      },
-      {
         "name": "another",
         "path": "/home/another",
         "size": 4096,
         "type": "directory"
+      },
+      {
+        "name": "index.html",
+        "path": "/home/index.html",
+        "size": 229,
+        "type": "file"
       }
     ],
     "path": "/home"

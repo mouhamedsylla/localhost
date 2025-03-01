@@ -1,8 +1,10 @@
 use serde::Deserialize;
+use std::collections::HashSet;
 use std::error::Error;
 use std::fmt;
 use std::fs;
 use std::net::AddrParseError;
+use std::net::IpAddr;
 use std::path::Path;
 use std::collections::HashMap;
 use crate::server::logger::{Logger, LogLevel};
@@ -317,46 +319,59 @@ impl SessionConfig {
 
 
 impl Host {
-    pub fn is_valid_essential_config(&self) -> Result<(), ConfigError> {
-        let mut has_valid_port = false;
-
-        if let Some(server_name) = &self.server_name {
-            if server_name.is_empty() {
-                return Err(ConfigError::Critical("Host server_name is empty".to_string()));
-            }
-        } else {
-            return Err(ConfigError::Critical("Host server_name is undefined".to_string()));
+    pub fn is_valid_essential_config(&mut self) -> Result<(), ConfigError> {
+        // Validation du server_name
+        let server_name = self.server_name
+            .as_ref()
+            .ok_or_else(|| ConfigError::Critical("Host server_name is undefined".to_string()))?;
+        
+        if server_name.trim().is_empty() {
+            return Err(ConfigError::Critical("Host server_name is empty".to_string()));
         }
-
-        if let Some(server_address) = &self.server_address {
-            match server_address.parse::<std::net::IpAddr>() {
-                Ok(_) => {},
-                Err(e) => return Err(ConfigError::Critical(format!("Host server_address is invalid: {}", e))),
-            }
-        } else {
-            return Err(ConfigError::Critical("Host server_address is undefined".to_string()));
+        
+        // Validation du server_address
+        let server_address = self.server_address
+            .as_ref()
+            .ok_or_else(|| ConfigError::Critical("Host server_address is undefined".to_string()))?;
+        
+        if server_address.parse::<IpAddr>().is_err() {
+            return Err(ConfigError::Critical(format!("Host server_address is invalid: {}", server_address)));
         }
-
-        if let Some(ports) = &self.ports {
-            if ports.is_empty() {
-                return Err(ConfigError::Critical("Host ports is empty".to_string()));
-            }
-        } else {
-            return Err(ConfigError::Critical("Host ports is undefined".to_string()));
+        
+        // Validation des ports
+        let ports = self.ports
+            .as_ref()
+            .ok_or_else(|| ConfigError::Critical("Host ports is undefined".to_string()))?;
+        
+        if ports.is_empty() {
+            return Err(ConfigError::Critical("Host ports is empty".to_string()));
         }
-
-        if let Some(ports) = &self.ports {
-            has_valid_port = ports.iter().all(|port| {
-                port.parse::<u16>().is_ok()
+        
+        let (valid_ports, invalid_ports) = ports.iter()
+            .fold((HashSet::new(), Vec::new()), |(mut valid, mut invalid), port_str| {
+                match port_str.parse::<u16>() {
+                    Ok(port) => { valid.insert(port); },
+                    Err(_) => { invalid.push(port_str); }
+                }
+                (valid, invalid)
             });
+        
+        if !invalid_ports.is_empty() {
+
+            return Err(ConfigError::Critical("Host ports contains an invalid port".to_string()));
+        }
+        
+        let logger = Logger::new(LogLevel::DEBUG);
+
+        if valid_ports.len() < ports.len() {
+            logger.warn(&format!("Host ports contain duplicate values on {:?}", self.server_name.as_ref().unwrap()), MODULE);
         }
 
-        if !has_valid_port {
-            return Err(ConfigError::Critical("Host ports contains invalid port".to_string()));
-        } 
-
+        self.ports = Some(valid_ports.into_iter().map(|port| port.to_string()).collect());
+        
         Ok(())
     }
+
 
     pub fn collect_warnings(&self) -> Vec<ConfigError> {
         let mut warnings = Vec::new();
@@ -401,77 +416,74 @@ impl Host {
 impl ServerConfig {
     pub fn load_and_validate(with_warn: bool) -> Result<ServerConfig, ConfigError> {
         let logger = Logger::new(LogLevel::DEBUG);
-
+    
         let config_content = fs::read_to_string("./src/config/config.json")
             .map_err(|e| {
                 logger.error(&format!("Cannot read config file: {}", e), MODULE);
                 ConfigError::Critical(format!("Cannot read config file: {}", e))
             })?;
-
+    
         let mut config: ServerConfig = serde_json::from_str(&config_content)
             .map_err(|e| {
                 logger.error(&format!("Cannot parse config file: {}", e), MODULE);
                 ConfigError::Critical(format!("Cannot parse config file: {}", e))
             })?;
-
+    
         let mut server_names = std::collections::HashSet::new();
         let mut validation_errors = Vec::new();
-
-        config.servers.retain(|host| {
+    
+        config.servers = config.servers.into_iter().filter_map(|mut host| {
             match host.is_valid_essential_config() {
                 Ok(()) => {
                     if !server_names.insert(host.server_name.clone()) {
                         validation_errors.push(format!("Duplicate server name: {:?}", host.server_name));
-                        
-                        return false;
+                        None
                     } else {
                         let warnings = host.collect_warnings();
-                        if !warnings.is_empty() {
-                            for warn in warnings {
-                                match warn {
-                                    ConfigError::Critical(msg) => {
-                                        logger.error(&msg, &format!("{} - {}", MODULE, host.server_name.clone().unwrap_or("".to_string())));
-                                    },
-                                    ConfigError::Warning(msg) => {
-                                        if with_warn {
-                                            logger.warn(&msg, &format!("{} - {}", MODULE, host.server_name.clone().unwrap_or("".to_string())));
-                                        }
+                        for warn in warnings {
+                            match warn {
+                                ConfigError::Critical(msg) => {
+                                    logger.error(&msg, &format!("{} - {}", MODULE, host.server_name.clone().unwrap_or_default()));
+                                },
+                                ConfigError::Warning(msg) => {
+                                    if with_warn {
+                                        logger.warn(&msg, &format!("{} - {}", MODULE, host.server_name.clone().unwrap_or_default()));
                                     }
                                 }
                             }
                         }
+                        Some(host) // Conserve l'hôte valide
                     }
-                    true
                 },
                 Err(e) => {
                     match e {
                         ConfigError::Critical(msg) => {
-                            logger.error(&msg, &format!("{} - {}", MODULE, host.server_name.clone().unwrap_or("".to_string())));
+                            logger.error(&msg, &format!("{} - {}", MODULE, host.server_name.clone().unwrap_or_default()));
                         },
                         ConfigError::Warning(msg) => {
                             if with_warn {
-                                logger.warn(&msg, &format!("{} - {}", MODULE, host.server_name.clone().unwrap_or("".to_string())));
+                                logger.warn(&msg, &format!("{} - {}", MODULE, host.server_name.clone().unwrap_or_default()));
                             }
                         }
                     }
-                    false
-                }    
+                    None // Supprime l'hôte invalide
+                }
             }
-        });
-
+        }).collect();
+    
         if config.servers.is_empty() {
             let msg = "No valid server configuration found";
             logger.error(&msg, MODULE);
-            return Err(ConfigError::Critical("No valid server configuration found".to_string()));
+            return Err(ConfigError::Critical(msg.to_string()));
         }
-
-        if !config.validation_errors.is_empty() {
-            for error in &config.validation_errors {
-                logger.error(&error, MODULE);
+    
+        if !validation_errors.is_empty() {
+            for error in &validation_errors {
+                logger.error(error, MODULE);
             }
             return Err(ConfigError::Critical("Invalid configuration".to_string()));
         }
-
+    
         Ok(config)
     }
 }

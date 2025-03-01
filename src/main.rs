@@ -4,6 +4,7 @@ mod http;
 mod server;
 mod config;
 
+use std::collections::HashMap;
 use std::fs::{OpenOptions};
 use std::io::{Write, BufRead, BufReader};
 use server::server::Server;
@@ -17,7 +18,7 @@ use std::path::Path;
 use std::path::PathBuf;
 use crate::http::request::HttpMethod;
 use crate::server::uploader::Uploader;
-use crate::server::route::Route;
+use crate::server::route::{Route, RouteMatcher};
 use crate::server::cgi::CGIConfig;
 use crate::server::logger::{Logger, LogLevel};
 use crate::config::config::ServerConfig;
@@ -83,10 +84,10 @@ fn update_hosts_file(server_name: &str, ip_address: &str) -> Result<(), std::io:
 
 
 fn main() -> Result<(), ServerError> {
-    print!("{esc}[2J{esc}[1;1H", esc = 27 as char);
+   print!("{esc}[2J{esc}[1;1H", esc = 27 as char);
     
     let mut active_warn_opt = false;
-    let args: Vec<String> = std::env::args().collect();
+    let args: Vec<String> = std::env::args().collect(); 
 
     if args.contains(&String::from("--warn")) {
         active_warn_opt = true;
@@ -103,7 +104,7 @@ fn main() -> Result<(), ServerError> {
     match load_config {
         Ok(server_config) => {
             for host_config in server_config.servers {
-                let mut routes: Vec<Route>  =  Vec::new();
+                let mut routes: Vec<Route> = Vec::new();
 
                 if let Some(tab_routes) = host_config.routes {
                     for r in tab_routes {
@@ -118,7 +119,6 @@ fn main() -> Result<(), ServerError> {
                         } else {
                             None
                         };
-
 
     
                         let results = ServerStaticFiles::new(
@@ -140,13 +140,15 @@ fn main() -> Result<(), ServerError> {
                             };
     
                         routes.push(Route { 
-                            path: r.path.unwrap(), 
+                            path: r.path.clone().unwrap(), 
                             methods , 
                             static_files, 
                             cgi_config,
                             redirect: r.redirect.clone(), 
                             session_required: r.session_required, 
-                            session_redirect: r.session_redirect.clone() 
+                            session_redirect: r.session_redirect.clone(),
+                            matcher: Some(RouteMatcher::from_path(r.path.unwrap().as_str())),
+                            params: HashMap::new(),
                         });
                     }
                 }
@@ -177,9 +179,10 @@ fn main() -> Result<(), ServerError> {
                 let _ = servers.add_host(host);
                 host_count += 1;
 
-            }
-            
-           // let upload_dir = uploader.get_upload_dir();
+            }   
+
+
+ 
             display_banner(host_count, &uploader.get_upload_dir(), active_warn_opt);
         }
         Err(e) => {

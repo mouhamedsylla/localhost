@@ -1,6 +1,8 @@
+use std::collections::HashMap;
+use std::hash::Hash;
 use std::net::{TcpListener, TcpStream};
 use std::os::unix::io::{AsRawFd, RawFd};
-use std::path::Path;
+use std::path::{self, Path};
 use crate::server::route::Route;
 use crate::server::errors::ServerError;
 use crate::server::uploader::Uploader;
@@ -111,47 +113,89 @@ impl Host {
         self.listeners.iter().any(|listener| listener.fd == fd)
     }
 
-    pub fn get_route(&self, path: &str) -> Option<&Route> {
-        if let Some(route) = self.routes.iter().find(|r| r.path == path) {
-            return Some(route);
-        }
-
-        let path_segments: Vec<_> = path.trim_end_matches('/').split('/').collect();
-        for route in &self.routes {
-            let route_segments: Vec<_> = route.path.trim_end_matches('/').split('/').collect();
-            
-            if path_segments.len() != route_segments.len() {
-                continue;
-            }
-    
-            let mut is_dynamic_match = true;
-            for (p, r) in path_segments.iter().zip(route_segments.iter()) {
-                if !r.starts_with(':') && r != p {
-                    is_dynamic_match = false;
-                    break;
-                }
-            }
-    
-            if is_dynamic_match {
+    pub fn get_route(&mut self, path: &str) -> Option<&Route> {
+        for route in self.routes.iter_mut() {
+            if route.matcher.is_some() && route.matcher.as_ref().unwrap().matches(path) {
+                let params = route.matcher.as_ref().unwrap().extract_params(path);
+                params.iter().for_each(|(k, v)| {
+                    route.params.insert(k.clone(), v.clone());
+                }); 
                 return Some(route);
             }
-        }
 
-        let file_route = self.routes.iter().find(|r| {
-            if let Some(files) = r.static_files.as_ref() {
+            if let Some(file_route) = route.static_files.as_ref() {
                 let path_file = Path::new(path.trim_start_matches("/"));
-                return files.is_directory_contain_file(path_file);
-            } else {
-                return false;
+                if let files = file_route.is_directory_contain_file(path_file) {
+                    return Some(route);
+                }
             }
-        });
-
-        if file_route.is_some() {
-            return file_route;
         }
-    
+
+        // // Fall back to original implementation
+        // if let Some(route) = self.routes.iter().find(|r| r.path == path) {
+        //     return Some(route);
+        // }
+
+        // // Check for static files
+        // let file_route = self.routes.iter().find(|r| {
+        //     if let Some(files) = r.static_files.as_ref() {
+        //         let path_file = Path::new(path.trim_start_matches("/"));
+        //         files.is_directory_contain_file(path_file)
+        //     } else {
+        //         false
+        //     }
+        // });
+
+        // if let Some(route) = file_route {
+        //     return Some(route);
+        // }
+
         None
     }
+
+    // pub fn get_route(&self, path: &str) -> Option<&Route> {
+    //     if let Some(route) = self.routes.iter().find(|r| r.path == path) {
+    //         return Some(route);
+    //     }
+
+    //     let path_segments: Vec<_> = path.trim_end_matches('/').split('/').collect();
+    //     for route in &self.routes {
+    //         let route_segments: Vec<_> = route.path.trim_end_matches('/').split('/').collect();
+            
+    //         if path_segments.len() != route_segments.len() {
+    //             continue;
+    //         }
+    
+    //         let mut is_dynamic_match = true;
+    //         for (p, r) in path_segments.iter().zip(route_segments.iter()) {
+    //             if !r.starts_with(':') && r != p {
+    //                 is_dynamic_match = false;
+    //                 break;
+    //             }
+    //         }
+    
+    //         if is_dynamic_match {
+    //             println!("dynamic match");
+    //             return Some(route);
+    //         }
+    //     }
+
+    //     let file_route = self.routes.iter().find(|r| {
+    //         if let Some(files) = r.static_files.as_ref() {
+    //             let path_file = Path::new(path.trim_start_matches("/"));
+    //             let rr = files.is_directory_contain_file(path_file);
+    //             return rr;
+    //         } else {
+    //             return false;
+    //         }
+    //     });
+
+    //     if file_route.is_some() {
+    //         return file_route;
+    //     }
+    
+    //     None
+    // }
 
     pub fn add_session_api(&mut self) {
         // Route for creating a session
@@ -163,6 +207,8 @@ impl Host {
             session_redirect: None,
             static_files: None,
             cgi_config: None,
+            matcher: None,
+            params: HashMap::new(),
         };
     
         // Route for deleting a session
@@ -174,6 +220,8 @@ impl Host {
             redirect: None,
             static_files: None,
             cgi_config: None,
+            matcher: None,
+            params: HashMap::new(),
         };
     
         // Add routes to this host

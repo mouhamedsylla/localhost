@@ -160,7 +160,6 @@ impl Server {
                     ConnectionState::Complete(request) => {
                         let host = &mut self.hosts[host_index];
                         if let Some(route) = host.get_route(&request.uri).cloned() {
-
                             if let Some(session_manager) = host.session_manager.as_mut() {
                                 match self.session_middleware.process(&request, &route, session_manager) {
                                     Ok(session) => {
@@ -206,6 +205,12 @@ impl Server {
                                         response.status_code.as_str()
                                     );
                                     self.logger.info(&message, "Server");
+
+                                    // Reset connection state for next request on the same connection
+                                    if connection.keep_alive && !should_close {
+                                        // self.logger.debug(&format!("Resetting connection state for fd: {}", fd), "Server");
+                                        connection.reset();
+                                    }
                                 },
                                 Err(error) => {
                                     self.logger.error(&error.to_string(), "Server");
@@ -214,10 +219,12 @@ impl Server {
                         } else {
                             let response = Response::not_found("Route not found");
                             if let Err(e) = connection.send_response(response.to_string()) {
-                                if e.kind() != std::io::ErrorKind::WouldBlock {
-                                    self.logger.error(&format!("Failed to send response: {}", e), "Server");
-                                    should_close = true;
-                                }
+                                if e.kind() != std::io::ErrorKind::WouldBlock && 
+                                e.kind() != std::io::ErrorKind::ConnectionReset && 
+                                e.kind() != std::io::ErrorKind::BrokenPipe {
+                                 self.logger.error(&format!("Failed to send response: {}", e), "Server");
+                                 should_close = true;
+                             }
                             }
                             self.logger.warn(&format!("Route not found: {}", request.uri), "Server");
                         }
@@ -300,7 +307,7 @@ impl Server {
                     self.epoll_fd,
                     events.as_mut_ptr(),
                     MAX_EVENTS as i32,
-                    1000
+                    -1
                 )
             };
 

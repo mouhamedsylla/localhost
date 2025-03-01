@@ -3,7 +3,7 @@
     {
       "server_address": "127.0.0.2",
       "server_name": "server1.home",
-      "ports": ["8080"],
+      "ports": ["8080", "8080"],
       "client_body_size_limit": "10M",
       "session": {
         "enabled": true,
@@ -28,24 +28,22 @@
           "methods": ["GET", "POST", "DELETE"],
           "root": "static",
           "default_page": "index.html",
-          "directory_listing": true,
-          "redirect": "/home"
+          "directory_listing": true
         },
         {
           "path": "/home",
-          "methods": ["GET", "POST", "DELETE"],
+          "methods": ["GET","POST", "DELETE"],
           "root": "static",
           "default_page": "index.html",
           "directory_listing": false,
-          "session_required": false,
-          "session_redirect": "/"
+          "session_required": false    
         }
       ]
     },
     {
       "server_address": "127.0.0.3",
       "server_name": "server2.home",
-      "ports": ["8082"],
+      "ports": ["8080"],
       "client_body_size_limit": "10M",
       "routes": [
         {

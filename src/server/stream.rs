@@ -8,7 +8,7 @@ pub mod request_stream {
     use std::io::{self, Read};
 
     /// Size of the read buffer for processing requests
-    const BUFFER_SIZE: usize = 4096;
+    const BUFFER_SIZE: usize = 8192;
     /// Maximum allowed size for a complete request
     const MAX_REQUEST_SIZE: usize = 10 * 1024 * 1024; // 10MB
 
@@ -165,25 +165,44 @@ pub mod request_stream {
                 content_length: usize,
             ) -> io::Result<RequestState> {
                 let total_expected = headers_end + content_length;
-            
+                
+                // Try to read as much as possible in one function call
                 while accumulated_data.len() < total_expected {
                     let mut temp_buffer = [0u8; BUFFER_SIZE];
-                    let bytes_read = self.stream.read(&mut temp_buffer)?;
-                    if bytes_read == 0 {
-                        // End of stream
-                        return Ok(RequestState::EndOfStream);
+                    match self.stream.read(&mut temp_buffer) {
+                        Ok(bytes_read) => {
+                            if bytes_read == 0 {
+                                // Connection closed prematurely
+                                return Ok(RequestState::EndOfStream);
+                            }
+                            accumulated_data.extend_from_slice(&temp_buffer[..bytes_read]);
+                        },
+                        Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
+                            // No more data available right now - save state and return
+                            self.state = RequestState::ProcessingBody { 
+                                accumulated_data,
+                                headers_end,
+                            };
+                            return Ok(self.state.clone());
+                        },
+                        Err(e) => return Err(e),
                     }
-                    accumulated_data.extend_from_slice(&temp_buffer[..bytes_read]);
                 }
-            
-                // We have all the data we need
+                
+                // If we get here, we have all the data we need
                 let request_data = RequestData {
                     data: accumulated_data[..total_expected].to_vec(),
                     headers_end,
                 };
-                self.buffer = accumulated_data[total_expected..].to_vec();
+                
+                // Save any excess data for the next request
+                self.buffer = if accumulated_data.len() > total_expected {
+                    accumulated_data[total_expected..].to_vec()
+                } else {
+                    Vec::new()
+                };
+                
                 self.state = RequestState::Complete(request_data);
-            
                 Ok(self.state.clone())
             }
             
@@ -286,7 +305,7 @@ pub mod request_stream {
                 }
             }
 
-            /// Writes data to the underlying stream
+            /// Writes data to the underlying stream with improved error handling
             /// 
             /// # Arguments
             /// * `buf` - The buffer to write
@@ -295,7 +314,20 @@ pub mod request_stream {
             /// - `Ok(())` if write was successful
             /// - `Err(io::Error)` if write failed
             fn write(&mut self, buf: &[u8]) -> io::Result<()> {
-                self.stream.write_all(buf)
+                match self.stream.write_all(buf) {
+                    Ok(_) => Ok(()),
+                    Err(e) => {
+                        // Handle connection reset more gracefully
+                        if e.kind() == ErrorKind::ConnectionReset || 
+                        e.kind() == ErrorKind::BrokenPipe {
+                            // Log but don't propagate - client is already gone
+                            println!("Client disconnected during response: {}", e);
+                            Ok(())
+                        } else {
+                            Err(e)
+                        }
+                    }
+                }
             }
 
             /// Flushes any buffered data to the underlying stream

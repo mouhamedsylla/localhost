@@ -106,8 +106,10 @@ impl ServerStaticFiles {
     /// Serves a static file
     pub fn serve_file(&mut self, path: &Path) -> io::Result<(Vec<u8>, Option<mime>, FileStatus)> {
         if !path.is_file() {
+            println!("eerrereerre");
             self.set_status(FileStatus::NotFound);
             if let Some(error_page) = self.error_pages.clone() {
+                println!("OOOOOOOOO KKKKK");
                 if let Some(page) = error_page.custom_pages.get("404") {
                     return self.serve_file(Path::new(self.directory.join(page).to_str().unwrap()));
                 }
