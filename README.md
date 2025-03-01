@@ -1,185 +1,254 @@
-# 🚀 Localhost: Because Every Server Deserves Some Style! 
+# 🚀 Localhost: Because Every Server Deserves Some Style! [![Build Status](https://img.shields.io/badge/build-passing-brightgreen)](https://github.com/yourusername/localhost) [![License](https://img.shields.io/badge/license-MIT-blue)](https://opensource.org/licenses/MIT) [![Rust](https://img.shields.io/badge/rust-1.72%2B-orange)](https://www.rust-lang.org/)
+
+<div align="center">
+  <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Desktop%20Computer.png" alt="Desktop Computer" width="150" />
+  
+  <p><i>A high-performance HTTP server with personality</i></p>
+  
+  [![Stars](https://img.shields.io/github/stars/mouhamedsylla/localhost?style=social)](https://github.com/yourusername/localhost)
+  [![Forks](https://img.shields.io/github/forks/mouhamedsylla/localhost?style=social)](https://github.com/yourusername/localhost/fork)
+  [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/yourusername/localhost/pulls)
+  [![Made with Love](https://img.shields.io/badge/Made%20with-♥-ff69b4)]()
+</div>
 
 ## 🌟 Welcome to the Party!
 
 Hey there, awesome developer! You've just stumbled upon **Localhost**, the HTTP server that makes serving web content as fun as playing with LEGO blocks (but with more ports and fewer foot injuries). Whether you're building a small personal project or a large-scale application, Localhost is here to make your life easier, faster, and more stylish.
 
+<div align="center">
+  <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Hand%20gestures/Waving%20Hand.png" alt="Waving Hand" width="80" />
+</div>
+
 ---
 
 ## 🎭 What's This Magic All About?
 
-**Localhost** is a high-performance, customizable HTTP server built with **Rust** that combines power, flexibility, and a touch of humor. It’s designed to handle everything from serving static files to executing CGI scripts, managing file uploads, and handling sessions. Think of it as your very own digital butler who juggles requests with ease and style.
+**Localhost** is a high-performance, customizable HTTP server built with **Rust** that combines power, flexibility, and a touch of humor. It features:
+
+<table>
+  <tr>
+    <td><img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Travel%20and%20places/Globe%20Showing%20Europe-Africa.png" width="40"/></td>
+    <td><b>Virtual Hosting</b>: Run multiple domains from a single server instance</td>
+  </tr>
+  <tr>
+    <td><img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/File%20Folder.png" width="40"/></td>
+    <td><b>Static File Serving</b>: Lightning-fast file delivery with directory listing option</td>
+  </tr>
+  <tr>
+    <td><img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Gear.png" width="40"/></td>
+    <td><b>CGI Support</b>: Run dynamic scripts for server-side processing</td>
+  </tr>
+  <tr>
+    <td><img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Key.png" width="40"/></td>
+    <td><b>Session Management</b>: Built-in user session handling</td>
+  </tr>
+  <tr>
+    <td><img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Inbox%20Tray.png" width="40"/></td>
+    <td><b>File Upload API</b>: Easy file management through REST endpoints</td>
+  </tr>
+  <tr>
+    <td><img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Symbols/Warning.png" width="40"/></td>
+    <td><b>Custom Error Pages</b>: Make even your 404s look good</td>
+  </tr>
+</table>
+
+All powered by an event-driven, non-blocking architecture with epoll for maximum efficiency.
 
 ---
 
-## 🎮 Let's Get This Show on the Road!
+## 🎮 Let's Get This Show on the Road! [![Installation](https://img.shields.io/badge/Difficulty-Easy-success)](https://github.com/yourusername/localhost#installation)
 
 ### Installation
 
-Getting started with Localhost is as easy as pie. Here’s how you can clone, build, and run it:
+Getting started with Localhost is as easy as pie. Here's how you can clone, build, and run it:
 
 ```bash
 # Clone our fantastic repository
-git clone https://github.com/yourusername/Localhost.git
+git clone https://github.com/yourusername/localhost.git
 
 # Step into the magic zone
-cd Localhost
+cd localhost
 
 # Build it like you mean it!
 cargo build --release
 ```
 
-### Running the Server
+### Running the Server [![Server Status](https://img.shields.io/badge/Status-Running-success)](https://github.com/yourusername/localhost#running-the-server)
 
-Once built, you can run Localhost in several ways depending on your needs:
+Once built, you can run Localhost like this:
 
 ```bash
 # The simple way
-./Localhost
-
-# The "I'm a pro" way (with a custom config file)
-./Localhost -c config.json
+./target/release/localhost
 
 # The "show me everything" way (with warnings enabled)
-./Localhost --warn  # Because warnings are like spoilers for server problems!
+./target/release/localhost --warn  # Because warnings are like spoilers for server problems!
 ```
 
----
+<div align="center">
+  <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Travel%20and%20places/Rocket.png" alt="Rocket" width="80" />
+</div>
 
-## 🎨 The Art of Configuration
+## 🎨 The Art of Configuration [![Config](https://img.shields.io/badge/Config-JSON-yellow)](https://github.com/yourusername/localhost#configuration)
 
-Localhost is highly configurable via a simple JSON configuration file. Here’s a sample configuration to get you started:
+Localhost is configured via a JSON file (`src/config/config.json` by default). Here's what a typical configuration looks like:
 
 ```json
 {
   "servers": [
     {
       "server_address": "127.0.0.2",
-      "server_name": "server1",  // Give it a cool name!
-      "ports": ["8080"],         // Ports are like doors to your server party
+      "server_name": "server1.home",  // Give it a cool name!
+      "ports": ["8080"],              // Ports are like doors to your server party
       "client_body_size_limit": "10M",  // Because size matters
       "session": {
         "enabled": true,
-        "name": "session_id",    // Keep it classy
+        "name": "session_id",         // Keep it classy
         "options": {
-          "max_age": 86400,      // One day of fun!
+          "max_age": 86400,           // One day of fun!
           "domain": "server1.home",
           "path": "/",
-          "secure": false,       // Living on the edge (just kidding, secure it in production!)
+          "secure": false,            // Secure it in production!
           "http_only": true,
           "same_site": "Lax"
+        }
+      },
+      "error_pages": {
+        "custom_pages": {
+          "404": "error/404.html"     // Style your errors
         }
       }
     }
   ]
 }
 ```
+Each server entry defines a virtual host with its own configuration.
 
----
+<div align="center">
+  <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Hand%20gestures/Writing%20Hand.png" alt="Writing Hand" width="80" />
+</div>
 
-## 🎪 Routes: Where the Magic Happens
+## 🧩 Virtual Hosting: Multiple Personalities Welcome! [![Hosts](https://img.shields.io/badge/Virtual%20Hosts-Unlimited-blueviolet)](https://github.com/yourusername/localhost#virtual-hosting)
 
-Routes in Localhost are defined in the configuration file and allow you to specify how different paths are handled. Here’s an example:
+One of Localhost's superpowers is virtual hosting - running multiple websites on a single server:
 
 ```json
 {
-  "path": "/home",               // The VIP entrance
-  "methods": ["GET", "POST", "DELETE"],  // The party tricks we know
-  "root": "static",             // Where we keep the good stuff
-  "default_page": "index.html", // The welcome mat
-  "directory_listing": true,    // Let's show off a bit
-  "session_required": true,     // No ticket, no entry!
-  "session_redirect": "/"       // The walk of shame
+  "servers": [
+    {
+      "server_address": "127.0.0.2",
+      "server_name": "server1.home",
+      "ports": ["8080"]
+      // other config...
+    },
+    {
+      "server_address": "127.0.0.3",
+      "server_name": "server2.home",
+      "ports": ["8080"]
+      // different config...
+    }
+  ]
 }
 ```
 
----
+Each virtual host:
 
-## 🎯 API Endpoints: What Can You Do?
+- Has its own domain name
+- Can listen on multiple ports
+- Has independent routes and configurations
+- Can have custom error pages
 
-Localhost exposes a powerful API to handle various tasks. Here’s a breakdown of the endpoints and what they allow you to do:
+The server automatically adds entries to your hosts file for convenient local development.
 
-### **Static File Handling**
-- **`GET /static/*`**  
-  Serve static files (HTML, CSS, JS, images, etc.) from the specified directory. Perfect for hosting your frontend assets.
+## ⚙️ How It Works: Behind the Curtain [![Architecture](https://img.shields.io/badge/Architecture-Event--Driven-informational)](https://github.com/yourusername/localhost#how-it-works)
 
----
+Localhost uses an event-driven architecture powered by epoll:
 
-### **File Upload and Management**
-- **`GET /api/files/list`**  
-  List all uploaded files with their metadata (ID, name, size, etc.).
-  
-- **`POST /api/files/upload`**  
-  Upload one or multiple files to the server. Supports multipart form data.
+<div align="center">
+  <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Magnifying%20Glass%20Tilted%20Left.png" alt="Magnifying Glass" width="80" />
+</div>
 
-- **`DELETE /api/files/:id`**  
-  Delete a specific file by its ID. Useful for cleaning up unused resources.
+1. **Event Loop**: Efficiently waits for network events
+2. **Connection Handling**: Non-blocking I/O for maximum throughput
+3. **Request Parsing**: Fast HTTP parsing with sensible timeouts
+4. **Route Matching**: Directs requests to appropriate handlers
+5. **Response Generation**: Delivers content with proper headers
 
----
+All of this happens asynchronously without blocking threads, giving you maximum performance even under heavy load.
 
-### **CGI Script Execution**
-- **`GET /cgi-bin/*`**  
-  Execute CGI scripts located in the specified directory. Ideal for dynamic content generation.
+## 🗂️ Project Structure: Finding Your Way Around [![Structure](https://img.shields.io/badge/Structure-Organized-success)](https://github.com/yourusername/localhost#project-structure)
 
----
-
-### **Session Management**
-- **`POST /api/session/create`**  
-  Create a new session for a user. Returns a session ID that can be used for subsequent requests.
-
-- **`DELETE /api/session/delete`**  
-  Destroy an existing session. Useful for logging users out or cleaning up expired sessions.
-
----
-
-## 🎭 Warning Mode: For the Drama Lovers
-
-Run Localhost with the `--warn` flag, and it will become your most honest critic. It’ll catch things like:
-
-- **Duplicate server names**: *"Hey, those server names are twins!"*
-- **Overlapping routes**: *"Your routes are playing musical chairs!"*
-- **Missing error pages**: *"404 page missing - now that's a real 404!"*
-
----
-
-## 🌈 The Directory Fashion Show
-
-Here’s the trendy directory layout for Localhost:
-
-```
-Localhost/
-├── config.json          # The master plan
-├── static/             # The public gallery
-├── error/              # Where mistakes look good
-└── example/            # Show and tell
+```tree
+localhost/  
+├── src/                # Code source  
+│   ├── server/        # Fonctionnalités principales du serveur  
+│   │   ├── http/       # Implémentation du protocole HTTP  
+│   │   ├── core/       # Gestion du serveur et des fonctionnalités de base  
+│   │   │   ├── host.rs       # Implémentation des hôtes virtuels  
+│   │   │   ├── handlers.rs   # Gestionnaires de requêtes  
+│   │   │   ├── session.rs    # Gestion des sessions  
+│   │   │   └── ...           # Autres composants du serveur  
+│   ├── config/       # Gestion de la configuration  
+├── static/            # Fichiers statiques  
+├── uploads/           # Répertoire des fichiers téléchargés  
+├── errors/            # Pages d'erreur personnalisées  
+└── config.json        # Configuration du serveur  
 ```
 
 ---
 
-## 🎪 Performance: Speed is Our Middle Name
+## 📝 Technical Details: For the Curious Minds [![Tech Stack](https://img.shields.io/badge/Tech%20Stack-Rust-orange)](https://github.com/yourusername/localhost#technical-details)
 
-Localhost is like a caffeinated cheetah wearing rocket boots - it's seriously fast! Thanks to:
+<div align="center">
+  <table>
+    <tr>
+      <td align="center"><img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Wrench.png" width="40"/></td>
+      <td><b>Language</b>: Rust</td>
+    </tr>
+    <tr>
+      <td align="center"><img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Gear.png" width="40"/></td>
+      <td><b>Architecture</b>: Event-driven with epoll</td>
+    </tr>
+    <tr>
+      <td align="center"><img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Travel%20and%20places/Globe%20with%20Meridians.png" width="40"/></td>
+      <td><b>HTTP Support</b>: HTTP/1.1 with keep-alive</td>
+    </tr>
+    <tr>
+      <td align="center"><img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Link.png" width="40"/></td>
+      <td><b>Connection Model</b>: Non-blocking I/O</td>
+    </tr>
+    <tr>
+      <td align="center"><img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Key.png" width="40"/></td>
+      <td><b>Session Storage</b>: In-memory with configurable options</td>
+    </tr>
+    <tr>
+      <td align="center"><img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/File%20Folder.png" width="40"/></td>
+      <td><b>File Handling</b>: Optimized static file serving with directory listings</td>
+    </tr>
+    <tr>
+      <td align="center"><img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Page%20with%20Curl.png" width="40"/></td>
+      <td><b>CGI Support</b>: Execute dynamic scripts in multiple languages</td>
+    </tr>
+    <tr>
+      <td align="center"><img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Card%20File%20Box.png" width="40"/></td>
+      <td><b>Configuration</b>: JSON-based with extensive validation</td>
+    </tr>
+  </table>
+</div>
 
-- **Keep-alive connections** (because goodbyes are overrated)
-- **Non-blocking I/O** (we don't like waiting either)
-- **Smart session management** (we remember the cool kids)
+<div align="center">
+  <a href="https://github.com/yourusername/localhost/stargazers">
+    <img src="https://img.shields.io/github/stars/yourusername/localhost?style=for-the-badge&color=yellow" alt="Stars" />
+  </a>
+  <a href="https://github.com/yourusername/localhost/network/members">
+    <img src="https://img.shields.io/github/forks/yourusername/localhost?style=for-the-badge&color=orange" alt="Forks" />
+  </a>
+  <a href="https://github.com/yourusername/localhost/issues">
+    <img src="https://img.shields.io/github/issues/yourusername/localhost?style=for-the-badge&color=red" alt="Issues" />
+  </a>
+</div>
 
----
-
-## 🎉 The Grand Finale
-
-Remember: Every great server starts with a single request. Make it count!
-
-**Made with ❤️, 🦀 Rust, and a sprinkle of server magic.**
-
----
-
-## 🛠️ Need Help? Found a Bug? Want to Contribute?
-
-We’re like a pineapple on pizza - always ready to create controversy! Open an issue or submit a PR. We’d love to hear from you!
-
-**Licensed under MIT** - because sharing is caring! 🎈
-
----
-
-P.S. If you're still reading this, you're officially awesome! Now go build something incredible with Localhost! 🚀
+<div align="center">
+  <p>Made with ❤️ by passionate developers</p>
+  <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Party%20Popper.png" alt="Party Popper" width="100" />
+</div>
