@@ -1,10 +1,7 @@
-use crate::http::response::Response;
-use crate::server::errors::ServerError;
 use crate::server::static_files::ServerStaticFiles;
 use crate::server::cgi::CGIConfig;
 use crate::http::request::HttpMethod;
 use std::collections::HashMap;
-use std::f64::consts::E;
 //use regex::Regex;
 use std::sync::Arc;
 use std::path::Path;

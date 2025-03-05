@@ -1,19 +1,13 @@
 use std::os::fd::AsRawFd;
-use std::path::Path;
 use std::time::{Instant, Duration};
 use std::{collections::HashMap, os::unix::io::RawFd};
-use crate::http::response;
 use crate::http::{
-    body::Body,
-    status::HttpStatusCode,
-    response::Response,
     header::{Header, HeaderName},
-    request::{Request, HttpMethod},
+    request::Request,
 };
 
 use crate::server::{
     host::Host,
-    route::Route,
     uploader::Uploader,
     errors::ServerError,
     connection::{Connection, ConnectionState},
@@ -22,14 +16,14 @@ use crate::server::{
 
 use crate::server::stream::request_stream::unifiedReader::UnifiedReader;
 use crate::server::session::session::SessionMiddleware;
+use crate::server::errors::{HttpError, SessionError};
 
 use libc::{
     epoll_create1, epoll_ctl, epoll_event, epoll_wait, 
-    EPOLLET, EPOLLIN, EPOLLHUP, EPOLLERR,
+    EPOLLET, EPOLLIN,
     EPOLL_CTL_ADD, EPOLL_CTL_DEL,
 };
 
-use serde_json::json;
 
 const EPOLL_EVENTS: u32 = (EPOLLIN | EPOLLET) as u32;
 const TIMEOUT_DURATION: Duration = Duration::from_secs(60);
@@ -140,7 +134,11 @@ impl Server {
             }
         }
 
-        let reader = UnifiedReader::new(stream);
+        let mut reader = UnifiedReader::new(stream);
+
+        if let Some(size) = host.max_request_size {
+            reader.set_max_request_size(size);
+        }
 
         let connection = Connection::new(client_fd, host.server_name.clone(), Box::new(reader));
         self.logger.debug(&format!("New connection on host: {} - {}", host.server_name, listener.port), "server");
@@ -166,8 +164,8 @@ impl Server {
                                         if let Some(s) = session {
                                         }
                                     },
-                                    Err(response) => {
-                                        if let Err(e) = connection.send_response(response.to_string()) {
+                                    Err(e) => {
+                                        if let Err(e) = connection.send_response(e.to_response().to_string()) {
                                             if e.kind() != std::io::ErrorKind::WouldBlock {
                                                 self.logger.error(&format!("Failed to send response: {}", e), "Server");
                                                 should_close = true;
@@ -192,6 +190,7 @@ impl Server {
                                         Header::from_str("Access-Control-Allow-Headers", "Content-Type"),
                                     ]);
 
+
                                     if let Err(e) = connection.send_response(response.clone().to_string()) {
                                         if e.kind() != std::io::ErrorKind::WouldBlock {
                                             self.logger.error(&format!("Failed to send response: {}", e), "Server");
@@ -208,16 +207,30 @@ impl Server {
 
                                     // Reset connection state for next request on the same connection
                                     if connection.keep_alive && !should_close {
-                                        // self.logger.debug(&format!("Resetting connection state for fd: {}", fd), "Server");
                                         connection.reset();
                                     }
                                 },
                                 Err(error) => {
                                     self.logger.error(&error.to_string(), "Server");
+                                    let response = HttpError::new(error).to_response(route.static_files.clone().as_mut());
+                                    if let Err(e) = connection.send_response(response.to_string()) {
+                                        if e.kind() != std::io::ErrorKind::WouldBlock {
+                                            self.logger.error(&format!("Failed to send response: {}", e), "Server");
+                                            should_close = true;
+                                        }
+                                    }
                                 }
                             }
                         } else {
-                            let response = Response::not_found("Route not found");
+
+                            //let response = Response::not_found("Route not found");
+                            let error_page = if let Some(ref pages) = host.error_pages {
+                                pages.custom_pages.get("404").cloned()
+                            } else {
+                                None
+                            };
+
+                            let response = HttpError::not_found(error_page);
                             if let Err(e) = connection.send_response(response.to_string()) {
                                 if e.kind() != std::io::ErrorKind::WouldBlock && 
                                 e.kind() != std::io::ErrorKind::ConnectionReset && 

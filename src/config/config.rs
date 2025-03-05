@@ -1,15 +1,12 @@
 use serde::Deserialize;
 use std::collections::HashSet;
-use std::error::Error;
 use std::fmt;
 use std::fs;
-use std::net::AddrParseError;
+use std::env;
 use std::net::IpAddr;
 use std::path::Path;
 use std::collections::HashMap;
 use crate::server::logger::{Logger, LogLevel};
-
-use crate::server::route;
 
 const ALLOWED_EXTENSIONS: [&str; 1] = ["py"];
 const ALLOWED_STATUS: [&str; 8] = ["400", "403", "404", "405", "413", "500", "502", "503"];
@@ -18,8 +15,7 @@ const MODULE : &str = "CONFIG";
 
 #[derive(Deserialize, Debug)]
 pub struct CgiConfig {
-    pub extension: String,
-    pub script_path: String,
+    pub script_file_name: String,
 }
 
 #[derive(Deserialize, Debug)]
@@ -96,23 +92,28 @@ impl CgiConfig {
     pub fn validate(&self) -> Vec<ConfigError> {
         let mut errors = Vec::new();
 
-        // Validate extension
-        if self.extension.is_empty() {
-            errors.push(ConfigError::Warning("CgiConfig extension is empty".to_string()));
-        } else if !ALLOWED_EXTENSIONS.contains(&self.extension.as_str()) {
-            errors.push(ConfigError::Warning(format!(
-                "CgiConfig extension '{}' is not allowed. Allowed extensions: {:?}",
-                self.extension, ALLOWED_EXTENSIONS
-            )));
+        // Vérifier si le nom du script est vide
+        if self.script_file_name.is_empty() {
+            errors.push(ConfigError::Warning("CgiConfig script_file_name is empty".to_string()));
+            return errors;
         }
-
-        // Validate script path
-        if self.script_path.is_empty() {
-            errors.push(ConfigError::Warning("CgiConfig script_path is empty".to_string()));
-        } else if !Path::new(&self.script_path).exists() {
+        
+        // Extraire l'extension du fichier
+        let extension = Path::new(&self.script_file_name)
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .unwrap_or("");
+            
+        // Vérifier si l'extension est autorisée
+        if extension.is_empty() {
             errors.push(ConfigError::Warning(format!(
-                "CgiConfig script_path '{}' does not exist",
-                self.script_path
+                "CgiConfig script '{}' has no extension",
+                self.script_file_name
+            )));
+        } else if !ALLOWED_EXTENSIONS.contains(&extension) {
+            errors.push(ConfigError::Warning(format!(
+                "CgiConfig script extension '{}' is not allowed. Allowed extensions: {:?}",
+                extension, ALLOWED_EXTENSIONS
             )));
         }
 
@@ -417,7 +418,8 @@ impl ServerConfig {
     pub fn load_and_validate(with_warn: bool) -> Result<ServerConfig, ConfigError> {
         let logger = Logger::new(LogLevel::DEBUG);
     
-        let config_content = fs::read_to_string("./src/config/config.json")
+        let home_dir = env::var("HOME").expect("Failed to get home directory");
+        let config_content = fs::read_to_string(&format!("{}/.cargo/localhost-cli/config.json", home_dir))
             .map_err(|e| {
                 logger.error(&format!("Cannot read config file: {}", e), MODULE);
                 ConfigError::Critical(format!("Cannot read config file: {}", e))

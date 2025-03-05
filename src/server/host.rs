@@ -1,12 +1,10 @@
 use std::collections::HashMap;
-use std::hash::Hash;
 use std::net::{TcpListener, TcpStream};
 use std::os::unix::io::{AsRawFd, RawFd};
-use std::path::{self, Path};
+use std::path::Path;
 use crate::server::route::Route;
 use crate::server::errors::ServerError;
 use crate::server::uploader::Uploader;
-use serde_json::json;
 use crate::server::logger::{Logger, LogLevel};
 use crate::server::handlers::handlers::{
     Handler,
@@ -15,15 +13,17 @@ use crate::server::handlers::handlers::{
     CGIHandler,
     SessionHandler,
 };
+use crate::server::static_files::ErrorPages;
 use crate::http::{
-    body::Body,
     request::{Request, HttpMethod},
-    response::{Response, ResponseBuilder},
+    response::Response,
     status::HttpStatusCode,
     header::Header
 };
 
-use crate::server::session::session::{SessionManager, Session};
+use crate::server::errors::{HttpError, SessionError};
+
+use crate::server::session::session::SessionManager;
 
 #[derive(Debug)]
 pub struct HostListener {
@@ -73,6 +73,8 @@ pub struct Host {
     pub routes: Vec<Route>,
     pub session_manager: Option<SessionManager>,
     pub logger: Logger,
+    pub error_pages: Option<ErrorPages>,
+    pub max_request_size: Option<usize>,
 }
 
 /// Core Host implementation
@@ -82,7 +84,9 @@ impl Host {
         server_name: &str,
         ports: Vec<String>,
         routes: Vec<Route>,
-        session_manager: Option<SessionManager>, 
+        session_manager: Option<SessionManager>,
+        error_pages: Option<ErrorPages>,
+        max_request_size: Option<usize>,
     ) -> Result<Self, std::io::Error> {
         let mut listeners = Vec::new();
         let logger = Logger::new(LogLevel::INFO);
@@ -98,6 +102,8 @@ impl Host {
             routes,
             session_manager,
             logger,
+            error_pages,
+            max_request_size,
         })
     }
 
@@ -113,89 +119,48 @@ impl Host {
         self.listeners.iter().any(|listener| listener.fd == fd)
     }
 
-    pub fn get_route(&mut self, path: &str) -> Option<&Route> {
-        for route in self.routes.iter_mut() {
-            if route.matcher.is_some() && route.matcher.as_ref().unwrap().matches(path) {
-                let params = route.matcher.as_ref().unwrap().extract_params(path);
-                params.iter().for_each(|(k, v)| {
-                    route.params.insert(k.clone(), v.clone());
-                }); 
-                return Some(route);
-            }
+    pub fn get_route(&self, path: &str) -> Option<&Route> {
+        if let Some(route) = self.routes.iter().find(|r| r.path == path) {
+            return Some(route);
+        }
 
-            if let Some(file_route) = route.static_files.as_ref() {
-                let path_file = Path::new(path.trim_start_matches("/"));
-                if let files = file_route.is_directory_contain_file(path_file) {
-                    return Some(route);
+        let path_segments: Vec<_> = path.trim_end_matches('/').split('/').collect();
+        for route in &self.routes {
+            let route_segments: Vec<_> = route.path.trim_end_matches('/').split('/').collect();
+            
+            if path_segments.len() != route_segments.len() {
+                continue;
+            }
+    
+            let mut is_dynamic_match = true;
+            for (p, r) in path_segments.iter().zip(route_segments.iter()) {
+                if !r.starts_with(':') && r != p {
+                    is_dynamic_match = false;
+                    break;
                 }
+            }
+    
+            if is_dynamic_match {
+                return Some(route);
             }
         }
 
-        // // Fall back to original implementation
-        // if let Some(route) = self.routes.iter().find(|r| r.path == path) {
-        //     return Some(route);
-        // }
+        let file_route = self.routes.iter().find(|r| {
+            if let Some(files) = r.static_files.as_ref() {
+                let path_file = Path::new(path.trim_start_matches("/"));
+                let rr = files.is_directory_contain_file(path_file);
+                return rr;
+            } else {
+                return false;
+            }
+        });
 
-        // // Check for static files
-        // let file_route = self.routes.iter().find(|r| {
-        //     if let Some(files) = r.static_files.as_ref() {
-        //         let path_file = Path::new(path.trim_start_matches("/"));
-        //         files.is_directory_contain_file(path_file)
-        //     } else {
-        //         false
-        //     }
-        // });
-
-        // if let Some(route) = file_route {
-        //     return Some(route);
-        // }
-
+        if file_route.is_some() {
+            return file_route;
+        }
+    
         None
     }
-
-    // pub fn get_route(&self, path: &str) -> Option<&Route> {
-    //     if let Some(route) = self.routes.iter().find(|r| r.path == path) {
-    //         return Some(route);
-    //     }
-
-    //     let path_segments: Vec<_> = path.trim_end_matches('/').split('/').collect();
-    //     for route in &self.routes {
-    //         let route_segments: Vec<_> = route.path.trim_end_matches('/').split('/').collect();
-            
-    //         if path_segments.len() != route_segments.len() {
-    //             continue;
-    //         }
-    
-    //         let mut is_dynamic_match = true;
-    //         for (p, r) in path_segments.iter().zip(route_segments.iter()) {
-    //             if !r.starts_with(':') && r != p {
-    //                 is_dynamic_match = false;
-    //                 break;
-    //             }
-    //         }
-    
-    //         if is_dynamic_match {
-    //             println!("dynamic match");
-    //             return Some(route);
-    //         }
-    //     }
-
-    //     let file_route = self.routes.iter().find(|r| {
-    //         if let Some(files) = r.static_files.as_ref() {
-    //             let path_file = Path::new(path.trim_start_matches("/"));
-    //             let rr = files.is_directory_contain_file(path_file);
-    //             return rr;
-    //         } else {
-    //             return false;
-    //         }
-    //     });
-
-    //     if file_route.is_some() {
-    //         return file_route;
-    //     }
-    
-    //     None
-    // }
 
     pub fn add_session_api(&mut self) {
         // Route for creating a session
@@ -231,6 +196,7 @@ impl Host {
 
 
     pub fn route_request(&mut self, request: &Request, route: &Route, uploader: Option<Uploader>) -> Result<Response, ServerError> {
+        // Handle redirects
         if request.uri == route.path {
             if let Some(redirect) = &route.redirect {
                 if let Some(listing) = &route.static_files {
@@ -238,31 +204,32 @@ impl Host {
                         self.logger.info(&format!("Redirecting to {}", redirect), "Host");
                         return Ok(self.redirect(&redirect));
                     }
+                } else {
+                    self.logger.info(&format!("Redirecting to {}", redirect), "Host");
+                    return Ok(self.redirect(&redirect));
                 }
             }
         }
 
+        // Check if method is allowed for this route
+        if !route.methods.contains(&request.method) && !route.methods.is_empty() {
+            return Err(HttpError::MethodNotAllowed(format!(
+                "Method {} not allowed for route {}", 
+                request.method, route.path
+            )).into());
+        }
+
+        // Route the request to the appropriate handler
         match (&request.method, &request.uri) {
             // Handle file API endpoints with FileApiHandler
             (_, uri) if uri.starts_with("/api/files") => {
                 if let Some(uploader) = uploader {
                     // Create and use the file API handler
-                    let handler_result = FileAPIHandler::new(uploader.clone());
-                    match handler_result {
-                        Ok(mut handler) => {
-                            handler.serve_http(request)
-                            .map_err(|e| ServerError::ConnectionError(e.to_string()))
-                        },
-                        Err(err) => {
-                            return Err(ServerError::ConnectionError("not available service".to_string()));
-                        }
-                    }
+                    let mut handler = FileAPIHandler::new(uploader.clone())?;
+                    handler.serve_http(request, route)
                 } else {
                     // Return service unavailable if uploader is not configured
-                    let body = json!({
-                        "message": "File upload service is not available"
-                    });
-                    Ok(Response::response_with_json(body, HttpStatusCode::ServiceUnavailable))
+                    Err(HttpError::InternalServerError("File upload service is not available".to_string()).into())
                 }
             },
 
@@ -270,50 +237,28 @@ impl Host {
             (_, uri) if uri.starts_with("/api/session") => {
                 if let Some(session_manager) = self.session_manager.as_mut() {
                     let mut handler = SessionHandler::new(session_manager);
-                    handler.serve_http(request)
-                        .map_err(|e| ServerError::ConnectionError(e.to_string()))
+                    handler.serve_http(request, route)
                 } else {
-                    let body = json!({
-                        "message": "Session service is not available"
-                    });
-                    Ok(Response::response_with_json(body, HttpStatusCode::ServiceUnavailable))
+                    Err(HttpError::InternalServerError("Session service is not available".to_string()).into())
                 }
             },
 
-            //Handle GET requests with appropriate handler
-            (HttpMethod::GET, _) => {
-                if let Some(static_files) = &route.static_files {
-                    // Handle static file requests
-                    let mut handler = StaticFileHandler { static_files: static_files.clone() };
-                    handler.serve_http(request)
-                        .map_err(|e| ServerError::ConnectionError(e.to_string()))
-                } else if let Some(cgi_config) = &route.cgi_config {
-                    // Handle CGI script requests
+            // Handle requests based on the route configuration
+            _ => {
+                if let Some(cgi_config) = &route.cgi_config {
+                    // Handle CGI script requests first
                     let mut handler = CGIHandler { 
                         cgi_config: cgi_config.clone()
                     };
-                    handler.serve_http(request)
-                        .map_err(|e| ServerError::ConnectionError(e.to_string()))
+                    handler.serve_http(request, route)
+                } else if let Some(static_files) = &route.static_files {
+                    // Fall back to static file requests if no CGI handler matches
+                    let mut handler = StaticFileHandler { static_files: static_files.clone() };
+                    handler.serve_http(request, route)
                 } else {
                     // Return not found if no handler matches
-                    let body = Body::Text("Not Found".to_string());
-                    Ok(ResponseBuilder::new()
-                        .status_code(HttpStatusCode::NotFound)
-                        .header(Header::from_str("Content-Type", "text/plain"))
-                        .header(Header::from_str("Content-Length", &body.body_len().to_string()))
-                        .body(body)
-                        .build())
+                    Err(HttpError::NotFound(format!("No handler found for route: {}", request.uri)).into())
                 }
-            },
-            // Handle unsupported HTTP methods
-            _ => {
-                let body = Body::Text("Method Not Allowed".to_string());
-                Ok(ResponseBuilder::new()
-            .status_code(HttpStatusCode::MethodNotAllowed)
-            .header(Header::from_str("Content-Type", "text/plain"))
-            .header(Header::from_str("Content-Length", &body.body_len().to_string()))
-            .body(body)
-            .build())    
             }
         }
     }

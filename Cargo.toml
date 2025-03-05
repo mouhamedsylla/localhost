@@ -7,6 +7,14 @@ edition = "2021"
 name = "connection_tests"
 path = "tests/connection_tests.rs"
 
+[[bin]]
+name = "localhost-cli"
+path = "./src/bin/cli.rs"
+
+[[bin]]
+name = "localhost-server"
+path = "./src/bin/server.rs"
+
 [dependencies]
 httparse = "1.9.5"
 httpdate = "1.0.3"
@@ -18,3 +26,8 @@ serde_json = "1.0.133"
 chrono = "0.4"
 colored = "2.0"
 uuid = { version = "1.12.0", features = ["v4"] }
+clap = { version = "4.5.31", features = ["derive"] }
+rand = "0.9.0"
+dialoguer = "0.11.0"
+indicatif = "0.17.11"
+tabwriter = "1.4.1"

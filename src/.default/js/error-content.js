@@ -1,23 +1,7 @@
-// Update page content with error information
 export function setErrorContent(config) {
-    // Update page title
-    document.title = `${config.title} - ${config.code}`;
-    
-    // Update error code display
-    const errorCodeElement = document.querySelector('.error-code');
-    if (errorCodeElement) {
-        errorCodeElement.textContent = config.code;
-    }
-    
-    // Update error message
-    const errorMessageElement = document.querySelector('.error-message');
-    if (errorMessageElement) {
-        errorMessageElement.textContent = config.message;
-    }
-    
-    // Update button text
-    const backButtonElement = document.querySelector('.back-button');
-    if (backButtonElement) {
-        backButtonElement.textContent = config.buttonText;
-    }
+    // Use the injected message if available
+    const errorMessage = window.ERROR_MESSAGE || config.message;
+    document.querySelector('.error-code').textContent = config.code;
+    document.querySelector('.error-message').textContent = errorMessage;
+    document.querySelector('.back-button').textContent = config.buttonText || 'Go Back';
 }

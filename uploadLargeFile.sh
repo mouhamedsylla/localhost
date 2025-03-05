@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Définir l'URL du serveur
-SERVER_URL="http://server2.home:8082/api/files/upload"
+SERVER_URL="http://uploader.home:8080/api/files/upload"
 
 # Fichier à uploader
 FILE_PATH="./largeFile.txt"

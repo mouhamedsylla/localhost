@@ -1,18 +1,12 @@
-use std::os::unix::io::{AsRawFd, RawFd};
-use std::time::{Instant, Duration};
-use std::io::{self, Read, Write, Error};
-use crate::http::header;
+use std::os::unix::io::RawFd;
+use std::time::Instant;
+use std::io;
 use crate::http::{
     request::Request,
-    header::{HeaderName, HeaderParsedValue},
     request::parse_request
 };
 
-use libc::{
-    epoll_event,
-    EPOLLET, EPOLLIN, EPOLLHUP, EPOLLERR,
-    EPOLL_CTL_ADD, EPOLL_CTL_DEL,
-};
+use libc::EPOLLIN;
 
 use crate::server::stream::request_stream::{
     RequestStream,
@@ -110,12 +104,5 @@ impl Connection {
             println!("erreur to write: {}", e);
         };
         self.reader.flush()
-    }
-}
-
-fn want_keep_alive(request: Request) -> bool {
-    match request.get_header(HeaderName::Connection) {
-        Some(header) => header.value.value.to_lowercase() == "keep-alive",
-        None => true
     }
 }

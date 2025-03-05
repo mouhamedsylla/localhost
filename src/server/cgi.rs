@@ -1,12 +1,12 @@
-use std::process::{Command, Stdio};
 use crate::http::request::Request;
 use crate::http::response::Response;
-use crate::http::header::{self, Header, HeaderName};
+use crate::http::header::Header;
 use crate::http::body::Body;
 use crate::http::status::HttpStatusCode;
+use crate::server::errors::{ServerError, CGIError};
 use std::collections::HashMap;
-use std::io::Error;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Output, Stdio};
 
 #[derive(Debug, Clone)]
 pub struct CGIConfig {
@@ -45,37 +45,51 @@ impl CGIConfig {
         env
     }
 
-    pub fn parse_cgi_output(&self, output: std::process::Output) -> Result<Response, std::io::Error> {
+    pub fn parse_cgi_output(&self, output: Output) -> Result<Response, ServerError> {
         if !output.status.success() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("CGI script error: {}", 
-                    String::from_utf8_lossy(&output.stderr))
-            ));
+            let error_msg = String::from_utf8_lossy(&output.stderr);
+            return Err(CGIError::ScriptOutputError(error_msg.to_string()).into());
         }
 
         // Parser les headers et le body
         let output_str = String::from_utf8_lossy(&output.stdout);
         let parts: Vec<&str> = output_str.split("\r\n\r\n").collect();
         
-        if parts.len() != 2 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "Invalid CGI output format"
-            ));
+        if parts.len() < 2 {
+            return Err(CGIError::InvalidOutputFormat.into());
         }
 
         // Construire la réponse
         let mut headers = Vec::new();
+        let mut status_code = HttpStatusCode::Ok;
+
         for line in parts[0].lines() {
-            let h_parts: Vec<&str> = line.splitn(2, ":").collect();
-            if h_parts.len() == 2 {
-                headers.push(Header::from_str(h_parts[0].trim(), h_parts[1].trim()));
+            // Vérifie si c'est une ligne Status pour extraire le code HTTP
+            if line.to_lowercase().starts_with("status:") {
+                if let Some(status_str) = line.splitn(2, ':').nth(1) {
+                    if let Some(code_str) = status_str.trim().split_whitespace().next() {
+                        if let Ok(code) = code_str.parse::<u16>() {
+                            if !HttpStatusCode::from_code(code).is_none() {
+                                status_code = HttpStatusCode::from_code(code).unwrap();
+                            };
+                        }
+                    }
+                }
+            } else {
+                let h_parts: Vec<&str> = line.splitn(2, ":").collect();
+                if h_parts.len() == 2 {
+                    headers.push(Header::from_str(h_parts[0].trim(), h_parts[1].trim()));
+                }
             }
         }
 
+        // Assurer qu'on a un Content-Type, sinon mettre text/plain par défaut
+        if !headers.iter().any(|h| h.name.to_string().to_lowercase() == "content-type") {
+            headers.push(Header::from_str("content-type", "text/plain"));
+        }
+
         Ok(Response::new(
-            HttpStatusCode::Ok,
+            status_code,
             headers,
             Some(Body::text(parts[1]))
         ))
@@ -86,5 +100,33 @@ impl CGIConfig {
             .and_then(|ext| ext.to_str())
             .map(|ext| self.allowed_extensions.contains(&ext.to_string()))
             .unwrap_or(false)
+    }
+
+    pub fn validate_script(&self, script_path: &Path) -> Result<(), ServerError> {
+        if (!script_path.exists()) {
+            return Err(CGIError::ScriptNotFound(script_path.to_path_buf()).into());
+        }
+
+        if (!self.is_allowed_extension(script_path)) {
+            let ext = script_path.extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("unknown")
+                .to_string();
+            return Err(CGIError::ExtensionNotAllowed(ext).into());
+        }
+
+        Ok(())
+    }
+
+    pub fn execute_script(&self, script_path: &Path, env_vars: &HashMap<String, String>) 
+        -> Result<Output, ServerError> {
+        Command::new(&self.interpreter)
+            .arg(script_path)
+            .envs(env_vars)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .map_err(|e| CGIError::ExecutionFailed(e.to_string()).into())
     }
 }

@@ -1,9 +1,8 @@
-use serde_json::{json, Value};
 use std::{
     fs::{self, read_dir},
-    io,
     path::{Path, PathBuf},
 };
+use crate::server::errors::{ServerError, UploaderError};
 
 #[derive(Debug, Clone)]
 pub struct File {
@@ -32,17 +31,22 @@ impl Uploader {
     }
 
     // Core business logic methods
-    pub fn add_file(&mut self, name: String, data: &[u8]) -> io::Result<File> {
+    pub fn add_file(&mut self, name: String, data: &[u8]) -> Result<File, ServerError> {
+
         self.sync_database()?;
         let clean_name = name.trim_matches('"').to_string();
         
         let file_path = self.generate_unique_path(&clean_name);
         
         if let Some(parent) = file_path.parent() {
-            fs::create_dir_all(parent)?;
+            fs::create_dir_all(parent).map_err(|e| 
+                UploaderError::UploadProcessingError(format!("Failed to create directory: {}", e))
+            )?;
         }
         
-        fs::write(&file_path, data)?;
+        fs::write(&file_path, data).map_err(|e| 
+            UploaderError::UploadProcessingError(format!("Failed to write file: {}", e))
+        )?;
 
         let new_file = File {
             id: self.generate_next_id(),
@@ -56,17 +60,16 @@ impl Uploader {
         Ok(new_file)
     }
 
-    pub fn delete_file(&mut self, file_id: i32) -> io::Result<File> {
+    pub fn delete_file(&mut self, file_id: i32) -> Result<File, ServerError> {
         self.sync_database()?;
         let file_index = self.database.iter()
             .position(|f| f.id == file_id)
-            .ok_or_else(|| io::Error::new(
-                io::ErrorKind::NotFound,
-                "File not found"
-            ))?;
+            .ok_or_else(|| UploaderError::FileNotFound(file_id))?;
 
         let file = self.database[file_index].clone();
-        fs::remove_file(&file.path)?;
+        fs::remove_file(&file.path).map_err(|e| 
+            UploaderError::DeleteError(file_id)
+        )?;
         self.database.remove(file_index);
         
         Ok(file)
@@ -76,16 +79,22 @@ impl Uploader {
         self.database.iter().collect()
     }
 
-    pub fn sync_database(&mut self) -> io::Result<()> {
+    pub fn sync_database(&mut self) -> Result<(), ServerError> {
         self.database.retain(|file| file.path.exists());
 
         if self.upload_dir.exists() {
-            for entry in fs::read_dir(&self.upload_dir)? {
-                let entry = entry?;
+            for entry in fs::read_dir(&self.upload_dir).map_err(|e| 
+                UploaderError::DatabaseSyncError(format!("Failed to read upload directory: {}", e))
+            )? {
+                let entry = entry.map_err(|e| 
+                    UploaderError::DatabaseSyncError(format!("Failed to read directory entry: {}", e))
+                )?;
                 let path = entry.path();
                 
                 if !self.database.iter().any(|f| f.path == path) {
-                    let metadata = entry.metadata()?;
+                    let metadata = entry.metadata().map_err(|e| 
+                        UploaderError::DatabaseSyncError(format!("Failed to read metadata: {}", e))
+                    )?;
                     self.database.push(File {
                         id: self.generate_next_id(),
                         name: entry.file_name().to_string_lossy().into_owned(),
@@ -108,8 +117,11 @@ impl Uploader {
         ALLOWED_TYPES.iter().any(|&allowed| mime_type.starts_with(allowed))
     }
 
-    pub fn max_file_size(&self) -> usize {
-        10 * 1024 * 1024 // 10MB
+    pub fn validate_mime_type(&self, mime_type: &str) -> Result<(), ServerError> {
+        if (!self.is_allowed_mime_type(mime_type)) {
+            return Err(UploaderError::UnsupportedFileType(mime_type.to_string()).into());
+        }
+        Ok(())
     }
 
     // Utility methods
@@ -147,18 +159,28 @@ impl Uploader {
         self.upload_dir.to_string_lossy().into_owned()
     }
 
-
+    pub fn get_file(&self, file_id: i32) -> Result<&File, ServerError> {
+        self.database.iter()
+            .find(|f| f.id == file_id)
+            .ok_or_else(|| UploaderError::FileNotFound(file_id).into())
+    }
 }
 
-fn list_files(dir_path: &Path) -> io::Result<Vec<File>> {
+fn list_files(dir_path: &Path) -> Result<Vec<File>, ServerError> {
     let mut files = Vec::new();
     let mut id = 0;
 
     if dir_path.exists() {
-        for entry in read_dir(dir_path)? {
-            let entry = entry?;
+        for entry in read_dir(dir_path).map_err(|e| 
+            UploaderError::DatabaseSyncError(format!("Failed to read directory: {}", e))
+        )? {
+            let entry = entry.map_err(|e| 
+                UploaderError::DatabaseSyncError(format!("Failed to read directory entry: {}", e))
+            )?;
             let path = entry.path();
-            let metadata = entry.metadata()?;
+            let metadata = entry.metadata().map_err(|e| 
+                UploaderError::DatabaseSyncError(format!("Failed to read metadata: {}", e))
+            )?;
 
             let name = entry.file_name()
                 .into_string()

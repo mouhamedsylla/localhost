@@ -1,9 +1,13 @@
 pub mod session {
-    use super::*;
     use colored::*;
     use uuid::Uuid;
-    use std::{collections::HashMap, sync::Arc};
+    use std::collections::HashMap;
     use std::time::{SystemTime, Duration};
+    use crate::server::errors::{ServerError, SessionError};
+    use crate::http::{
+        request::Request,
+        header::HeaderName,
+    };
 
     #[derive(Debug, Clone)]
     pub struct Session {
@@ -35,31 +39,32 @@ pub mod session {
     }
 
     pub trait SessionStore {
-        fn get(&self, id: &str) -> Option<Session>;
-        fn set(&mut self, session: Session);
-        fn delete(&mut self, id: &str);
-        fn cleanup_expired(&mut self);
+        fn get(&self, id: &str) -> Result<Option<Session>, ServerError>;
+        fn set(&mut self, session: Session) -> Result<(), ServerError>;
+        fn delete(&mut self, id: &str) -> Result<(), ServerError>;
+        fn cleanup_expired(&mut self) -> Result<(), ServerError>;
         fn clone_box(&self) -> Box<dyn SessionStore>;
-        fn list_sessions(&self) -> Vec<Session>;
+        fn list_sessions(&self) -> Result<Vec<Session>, ServerError>;
         
-        fn print_sessions(&self) {
+        fn print_sessions(&self) -> Result<(), ServerError> {
             println!("\n{}", "Current Sessions:".cyan().bold());
-            for session in self.list_sessions() {
+            for session in self.list_sessions()? {
                 println!("{}", "═".repeat(50).cyan());
                 println!("Session ID: {}", session.id.yellow());
                 println!("Created at: {}", session.created_at
                     .duration_since(SystemTime::UNIX_EPOCH)
-                    .unwrap()
+                    .unwrap_or_default()
                     .as_secs());
                 if let Some(expires) = session.expires_at {
                     println!("Expires at: {}", expires
                         .duration_since(SystemTime::UNIX_EPOCH)
-                        .unwrap()
+                        .unwrap_or_default()
                         .as_secs());
                 }
                 println!("Data: {:?}", session.data);
             }
             println!("{}\n", "═".repeat(50).cyan());
+            Ok(())
         }
     }
 
@@ -86,36 +91,36 @@ pub mod session {
         }
 
         impl SessionStore for MemorySessionStore {
-
-            fn get(&self, id: &str) -> Option<Session> {
-                self.sessions.get(id).cloned()
+            fn get(&self, id: &str) -> Result<Option<Session>, ServerError> {
+                Ok(self.sessions.get(id).cloned())
             }
 
-            fn set(&mut self, session: Session) {
+            fn set(&mut self, session: Session) -> Result<(), ServerError> {
                 self.sessions.insert(session.id.clone(), session);
+                Ok(())
             }
 
-            fn delete(&mut self, id: &str) {
+            fn delete(&mut self, id: &str) -> Result<(), ServerError> {
                 self.sessions.remove(id);
+                Ok(())
             }
 
-            fn cleanup_expired(&mut self) {
+            fn cleanup_expired(&mut self) -> Result<(), ServerError> {
                 self.sessions.retain(|_, session| !session.is_expired());
+                Ok(())
             }
 
             fn clone_box(&self) -> Box<dyn SessionStore> {
                 Box::new(self.clone())
             }
 
-            fn list_sessions(&self) -> Vec<Session> {
-                self.sessions.values().cloned().collect()
+            fn list_sessions(&self) -> Result<Vec<Session>, ServerError> {
+                Ok(self.sessions.values().cloned().collect())
             }
-         }
-
+        }
     }
 
     pub mod session_manager {
-        use std::default;
         use super::*;
         use crate::config::config::SessionConfig;
         use crate::http::header::{Header, Cookie, CookieOptions, SameSitePolicy};
@@ -131,7 +136,7 @@ pub mod session {
                 SessionManager { config, store }
             }
 
-            pub fn create_session(&mut self) -> (Session, Header) {
+            pub fn create_session(&mut self) -> Result<(Session, Header), ServerError> {
                 let option_config = self.config.options.clone();
                 let id = generate_id();
                 let cookie = if let Some(opts) = option_config {
@@ -157,28 +162,29 @@ pub mod session {
                 let mut session = Session::new(cookie.options.max_age);
                 session.set_id(id.clone());
 
-                self.store.set(session.clone());
+                self.store.set(session.clone())?;
                 let header = Header::from_str("set-cookie", &cookie.to_string());
                 
-                (session, header)
+                Ok((session, header))
             }
 
-            pub fn get_session(&mut self, cookie_header: Option<&Header>) -> Option<Session> {
+            pub fn get_session(&mut self, cookie_header: Option<&Header>) -> Result<Option<Session>, ServerError> {
                 if let Some(header) = cookie_header {
                     if let Some(cookie) = Cookie::parse(&header.value.value) {
-                        if let Some(session) = self.store.get(&cookie.value) {
+                        if let Some(session) = self.store.get(&cookie.value)? {
                             if !session.is_expired() {
-                                return Some(session);
+                                return Ok(Some(session));
                             }
-                            self.store.delete(&cookie.value);
+                            self.store.delete(&cookie.value)?;
+                            return Err(SessionError::SessionExpired(cookie.value).into());
                         }
                     }
                 }
-                None
+                Ok(None)
             }
 
-            pub fn destroy_session(&mut self, session_id: &str) -> Header {                
-                self.store.delete(session_id);
+            pub fn destroy_session(&mut self, session_id: &str) -> Result<Header, ServerError> {                
+                self.store.delete(session_id)?;
                 let mut options = CookieOptions::default();
                 options.max_age = Some(0);
                 let cookie = Cookie::with_options(
@@ -188,8 +194,8 @@ pub mod session {
                 );
                 let header = Header::from_str("set-cookie", &cookie.to_string());
                 
-                self.store.print_sessions();
-                header
+                self.store.print_sessions()?;
+                Ok(header)
             }
         }
 
@@ -204,21 +210,16 @@ pub mod session {
     }
 
     pub mod session_middleware {
+
         use super::*;
-        use crate::http::{
-            request::Request,
-            response::Response,
-            header::{HeaderName, Header},
-            status::HttpStatusCode,
-            body::Body,
-        };
         use crate::server::route::Route;
 
         pub struct SessionMiddleware {}
 
         impl SessionMiddleware {
-
-            pub fn process(&self, req: &Request, route: &Route, current_manager: &mut SessionManager) -> Result<Option<Session>, Response> {
+            pub fn process(&self, req: &Request, route: &Route, current_manager: &mut SessionManager) 
+                -> Result<Option<Session>, ServerError> {
+                
                 if let Some(required) = &route.session_required {
                     if !required {
                         return Ok(None);
@@ -227,44 +228,30 @@ pub mod session {
                     return Ok(None);
                 }
 
+
+
                 let cookie_header = req.headers.iter().find(|h| h.name == HeaderName::Cookie);
 
-                if let Some(session) = current_manager.get_session(cookie_header) {
-                    if session.is_expired() {
-                        current_manager.destroy_session(&session.id);
-                        if let Some(redirect) = &route.session_redirect {
-                            return Err(self.redirect(redirect));
+                match current_manager.get_session(cookie_header) {
+                    Ok(Some(session)) => {
+                        if session.is_expired() {
+                            current_manager.destroy_session(&session.id)?;
+                            if let Some(redirect_url) = &route.session_redirect {
+                                return Err(SessionError::SessionExpired(format!("Redirect to: {}", redirect_url)).into());
+                            }
+                            return Err(SessionError::SessionExpired(session.id).into());
                         }
-                        self.session_expire();
-                    }
-                    Ok(Some(session))                        
-                } else {
-                    if let Some(redirect) = &route.session_redirect {
-                        Err(self.redirect(redirect))
-                    } else {
-                        Err(self.session_expire())
-                    }
-                }       
-            }
-
-            fn redirect(&self, redirect: &str) -> Response {
-                Response::new(
-                    HttpStatusCode::Found,
-                    vec![Header::from_str("location", redirect)],
-                    None
-                )
-            }
-
-            fn session_expire(&self) -> Response {
-                let body = Body::text("Session expired");
-                Response::new(
-                    HttpStatusCode::Unauthorized,
-                    vec![
-                        Header::from_str("content-type", "text/plain"),
-                        Header::from_str("content-length", &body.body_len().to_string()),
-                    ],
-                    Some(body)
-                )
+                        Ok(Some(session))
+                    },
+                    Ok(None) => {
+                        if let Some(redirect) = &route.session_redirect {
+                            return Err(SessionError::SessionExpiredRedirect(redirect.to_string()).into());
+                        } else {
+                            return Err(SessionError::SessionExpired("Session expired".to_string()).into());
+                        }
+                    },
+                    Err(e) => Err(e),
+                }   
             }
         }
     }

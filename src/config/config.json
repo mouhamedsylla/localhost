@@ -17,26 +17,22 @@
           "same_site": "Lax"
         }
       },
-      "error_pages": {
-        "custom_pages": {
-          "404": "error/404.html"
-        }
-      },
       "routes": [
         {
           "path": "/",
           "methods": ["GET", "POST", "DELETE"],
           "root": "static",
           "default_page": "index.html",
-          "directory_listing": true
+          "directory_listing": false
         },
         {
-          "path": "/home",
+          "path": "/test",
           "methods": ["GET","POST", "DELETE"],
           "root": "static",
           "default_page": "index.html",
           "directory_listing": false,
-          "session_required": false    
+          "session_required": true,
+          "session_redirect": "/"      
         }
       ]
     },

@@ -72,4 +72,40 @@ impl HttpStatusCode {
             HttpStatusCode::HTTPVersionNotSupported => "505 HTTP Version Not Supported",
         }
     }
+
+    pub fn from_code(code: u16) -> Option<HttpStatusCode> {
+        match code {
+            200 => Some(HttpStatusCode::Ok),
+            201 => Some(HttpStatusCode::Created),
+            202 => Some(HttpStatusCode::Accepted),
+            204 => Some(HttpStatusCode::NoContent),
+            301 => Some(HttpStatusCode::MovedPermanently),
+            302 => Some(HttpStatusCode::Found),
+            303 => Some(HttpStatusCode::SeeOther),
+            304 => Some(HttpStatusCode::NotModified),
+            307 => Some(HttpStatusCode::TemporaryRedirect),
+            308 => Some(HttpStatusCode::PermanentRedirect),
+            400 => Some(HttpStatusCode::BadRequest),
+            401 => Some(HttpStatusCode::Unauthorized),
+            403 => Some(HttpStatusCode::Forbidden),
+            404 => Some(HttpStatusCode::NotFound),
+            405 => Some(HttpStatusCode::MethodNotAllowed),
+            408 => Some(HttpStatusCode::RequestTimeout),
+            409 => Some(HttpStatusCode::Conflict),
+            410 => Some(HttpStatusCode::Gone),
+            411 => Some(HttpStatusCode::LengthRequired),
+            412 => Some(HttpStatusCode::PreconditionFailed),
+            413 => Some(HttpStatusCode::PayloadTooLarge),
+            414 => Some(HttpStatusCode::URITooLong),
+            415 => Some(HttpStatusCode::UnsupportedMediaType),
+            416 => Some(HttpStatusCode::RangeNotSatisfiable),
+            417 => Some(HttpStatusCode::ExpectationFailed),
+            500 => Some(HttpStatusCode::InternalServerError),
+            501 => Some(HttpStatusCode::NotImplemented),
+            502 => Some(HttpStatusCode::BadGateway),
+            503 => Some(HttpStatusCode::ServiceUnavailable),
+            504 => Some(HttpStatusCode::GatewayTimeout),
+            505 => Some(HttpStatusCode::HTTPVersionNotSupported),
+            _ => None,}
+    }
 }

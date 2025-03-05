@@ -5,7 +5,7 @@
 //! The module implements buffering and state management for processing HTTP requests.
 
 pub mod request_stream {
-    use std::io::{self, Read};
+    use std::io;
 
     /// Size of the read buffer for processing requests
     const BUFFER_SIZE: usize = 8192;
@@ -102,6 +102,8 @@ pub mod request_stream {
             temp_chunk_headers: Option<Vec<u8>>,
             /// Size of the current chunk being processed
             current_chunk_size: Option<usize>,
+            /// Maximum allowed size for a complete request
+            max_request_size: usize,
         }
 
         /// Implementation of UnifiedReader for handling HTTP request streams
@@ -115,6 +117,8 @@ pub mod request_stream {
         /// 
         /// let stream = TcpStream::new();
         /// let reader = UnifiedReader::new(stream);
+        /// // Or with custom max request size:
+        /// let reader = UnifiedReader::with_max_size(stream, 5 * 1024 * 1024); // 5MB
         /// ```
         /// 
         /// This implementation provides:
@@ -122,9 +126,10 @@ pub mod request_stream {
         /// - Support for both standard and chunked transfer encodings
         /// - Buffer management for partial reads
         /// - State management for request processing
+        /// - Configurable maximum request size
         impl<S: Read + Write> UnifiedReader<S> {
             
-            /// Creates a new UnifiedReader with the given stream
+            /// Creates a new UnifiedReader with the given stream and default max request size
             /// 
             /// # Arguments
             /// * `stream` - An object implementing both Read and Write traits
@@ -132,6 +137,18 @@ pub mod request_stream {
             /// # Returns
             /// A new UnifiedReader instance initialized with default values
             pub fn new(stream: S) -> Self {
+                Self::with_max_size(stream, MAX_REQUEST_SIZE)
+            }
+            
+            /// Creates a new UnifiedReader with the given stream and custom max request size
+            /// 
+            /// # Arguments
+            /// * `stream` - An object implementing both Read and Write traits
+            /// * `max_request_size` - Maximum request size in bytes
+            /// 
+            /// # Returns
+            /// A new UnifiedReader instance with the specified max request size
+            pub fn with_max_size(stream: S, max_request_size: usize) -> Self {
                 UnifiedReader {
                     stream,
                     buffer: Vec::new(),
@@ -139,7 +156,21 @@ pub mod request_stream {
                     reader_type: ReaderType::Unknown,
                     temp_chunk_headers: None,
                     current_chunk_size: None,
+                    max_request_size,
                 }
+            }
+            
+            /// Sets a new maximum request size
+            /// 
+            /// # Arguments
+            /// * `size` - New maximum request size in bytes
+            pub fn set_max_request_size(&mut self, size: usize) {
+                self.max_request_size = size;
+            }
+            
+            /// Returns the current maximum request size in bytes
+            pub fn max_request_size(&self) -> usize {
+                self.max_request_size
             }
 
             fn determine_reader_type(data: &[u8], headers_end: usize) -> ReaderType {
@@ -165,6 +196,15 @@ pub mod request_stream {
                 content_length: usize,
             ) -> io::Result<RequestState> {
                 let total_expected = headers_end + content_length;
+
+                // Check if expected total size exceeds maximum
+                if total_expected > self.max_request_size {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!("Request size of {} bytes exceeds maximum of {} bytes", 
+                                total_expected, self.max_request_size)
+                    ));
+                }
                 
                 // Try to read as much as possible in one function call
                 while accumulated_data.len() < total_expected {
@@ -218,6 +258,15 @@ pub mod request_stream {
                         if let Some(line_end) = find_line_end(&self.buffer) {
                             let size_line = &self.buffer[..line_end - 2];
                             if let Some(size) = parse_chunk_size(size_line) {
+                                // Check if adding this chunk would exceed the maximum request size
+                                if accumulated_data.len() + size > self.max_request_size {
+                                    return Err(io::Error::new(
+                                        io::ErrorKind::InvalidData,
+                                        format!("Chunked request exceeds maximum size of {} bytes", 
+                                                self.max_request_size)
+                                    ));
+                                }
+                                
                                 if size == 0 {
                                     // Final chunk - complete request
                                     self.state = RequestState::Complete(RequestData {
@@ -262,12 +311,21 @@ pub mod request_stream {
             fn read_next(&mut self) -> io::Result<RequestState> {
                 let mut temp_buffer = [0u8; BUFFER_SIZE];
                 match self.state.clone() {
-                    /// When awaiting headers, try to read until we find the header boundary
+                    // When awaiting headers, try to read until we find the header boundary
                     RequestState::AwaitingHeaders => {
                         match self.stream.read(&mut temp_buffer)? {
                             0 => Ok(RequestState::EndOfStream),
                             n => {
                                 self.buffer.extend_from_slice(&temp_buffer[..n]);
+                                
+                                // Check if headers exceed maximum size
+                                if self.buffer.len() > self.max_request_size {
+                                    return Err(io::Error::new(
+                                        io::ErrorKind::InvalidData,
+                                        format!("Request headers exceed maximum size of {} bytes", self.max_request_size)
+                                    ));
+                                }
+                                
                                 if let Some(headers_end) = find_headers_end(&self.buffer) {
                                     let accumulated_data = self.buffer.clone();
                                     self.reader_type = Self::determine_reader_type(&accumulated_data, headers_end);
@@ -284,7 +342,7 @@ pub mod request_stream {
                         }
                     }
 
-                    /// When processing body, handle according to transfer type (chunked or standard)
+                    // When processing body, handle according to transfer type (chunked or standard)
                     RequestState::ProcessingBody { accumulated_data, headers_end } => {
                         match self.reader_type {
                             ReaderType::Unknown => Ok(RequestState::EndOfStream),
@@ -297,10 +355,10 @@ pub mod request_stream {
                         }
                     }
 
-                    /// For completed requests, just return the current state
+                    // For completed requests, just return the current state
                     RequestState::Complete(data) => Ok(RequestState::Complete(data)),
 
-                    /// For end of stream, return the end state
+                    // For end of stream, return the end state
                     RequestState::EndOfStream => Ok(RequestState::EndOfStream),
                 }
             }

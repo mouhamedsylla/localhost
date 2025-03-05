@@ -64,71 +64,149 @@ Getting started with Localhost is as easy as pie. Here's how you can clone, buil
 
 ```bash
 # Clone our fantastic repository
-git clone https://github.com/yourusername/localhost.git
+git clone https://github.com/mouhamedsylla/localhost.git
 
 # Step into the magic zone
 cd localhost
 
-# Build it like you mean it!
-cargo build --release
+# Set the environment variable for default resources
+export LOCALHOST_RESOURCES=$(pwd)/src/.default
+
+# Install the CLI and Server binaries
+cargo install --path .
 ```
 
-### Running the Server [![Server Status](https://img.shields.io/badge/Status-Running-success)](https://github.com/yourusername/localhost#running-the-server)
+### Running the Server
 
-Once built, you can run Localhost like this:
+<img alt="Server Status" src="https://img.shields.io/badge/Status-Running-success">
+
+Once installed, you can run Localhost like this:
 
 ```bash
-# The simple way
-./target/release/localhost
+# Run the server
+localhost-server
 
 # The "show me everything" way (with warnings enabled)
-./target/release/localhost --warn  # Because warnings are like spoilers for server problems!
+localhost-server --warn  # Because warnings are like spoilers for server problems!
 ```
 
-<div align="center">
-  <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Travel%20and%20places/Rocket.png" alt="Rocket" width="80" />
-</div>
+### Managing Sites with CLI
 
-## 🎨 The Art of Configuration [![Config](https://img.shields.io/badge/Config-JSON-yellow)](https://github.com/yourusername/localhost#configuration)
+<img alt="CLI" src="https://img.shields.io/badge/CLI-Friendly-success">
 
-Localhost is configured via a JSON file (`src/config/config.json` by default). Here's what a typical configuration looks like:
+The localhost-cli tool makes site management a breeze:
+
+```bash
+# Create a new site
+localhost-cli create
+
+# List all configured sites
+localhost-cli list
+
+# Show current configuration
+localhost-cli config
+
+# Clean configuration
+localhost-cli clean
+```
+
+> ⚠️ **Important Note**: Currently, the `localhost-cli create` command has some issues that could potentially overwrite your `config.json` file. For safety, it's recommended to **manually create your site directories** directly in `$HOME/.cargo/localhost-cli/sites` rather than using the CLI tool. After creating the directory structure manually, update your `config.json` accordingly.
+>
+> ```bash
+> # Manual site creation (recommended approach)
+> mkdir -p $HOME/.cargo/localhost-cli/sites/your-site-name
+> # Optionally create a cgi-bin directory
+> mkdir -p $HOME/.cargo/localhost-cli/sites/your-site-name/cgi-bin
+> ```
+>
+> We're working on improving the CLI tool in future updates.
+
+When creating a site, you'll be guided through an interactive process to set up a server name, address, ports, and whether you need a **cgi-bin** folder.
+
+<div align="center"> <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Travel%20and%20places/Rocket.png" alt="Rocket" width="80" /> </div>
+
+### 🎨 The Art of Configuration
+
+<img alt="Config" src="https://img.shields.io/badge/Config-JSON-yellow">
+
+Localhost is configured via a JSON file (`$HOME/.cargo/localhost-cli/config.json` by default). Here's what a typical configuration looks like:
 
 ```json
 {
   "servers": [
     {
       "server_address": "127.0.0.2",
-      "server_name": "server1.home",  // Give it a cool name!
-      "ports": ["8080"],              // Ports are like doors to your server party
-      "client_body_size_limit": "10M",  // Because size matters
+      "server_name": "server1.home",    // Give it a cool name!
+      "ports": ["8080"],                // Ports are like doors to your server party
+      "client_max_body_size": "10m",    // Because size matters
       "session": {
         "enabled": true,
-        "name": "session_id",         // Keep it classy
+        "name": "session_id",           // Keep it classy
         "options": {
-          "max_age": 86400,           // One day of fun!
+          "max_age": 86400,             // One day of fun!
           "domain": "server1.home",
           "path": "/",
-          "secure": false,            // Secure it in production!
+          "secure": false,              // Secure it in production!
           "http_only": true,
           "same_site": "Lax"
         }
       },
       "error_pages": {
         "custom_pages": {
-          "404": "error/404.html"     // Style your errors
+          "404": "error/404.html"       // Style your errors
         }
-      }
+      },
+      "routes": [
+        {
+          "path": "/",
+          "methods": ["GET", "POST"],
+          "root": "mysite",              // Maps to $HOME/.cargo/localhost-cli/sites/mysite
+          "default_page": "index.html",
+          "directory_listing": true,
+          "cgi": {
+            "extension": "py",
+            "script_file_name": "script.py"  // Located in cgi-bin directory
+          },
+          "session_required": false
+        }
+      ]
     }
   ]
 }
 ```
+
 Each server entry defines a virtual host with its own configuration.
 
-<div align="center">
-  <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Hand%20gestures/Writing%20Hand.png" alt="Writing Hand" width="80" />
-</div>
+<div align="center"> <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Hand%20gestures/Writing%20Hand.png" alt="Writing Hand" width="80" /> </div>
 
-## 🧩 Virtual Hosting: Multiple Personalities Welcome! [![Hosts](https://img.shields.io/badge/Virtual%20Hosts-Unlimited-blueviolet)](https://github.com/yourusername/localhost#virtual-hosting)
+### 📂 Directory Structure
+
+<img alt="Structure" src="https://img.shields.io/badge/Structure-Organized-success">
+
+Localhost uses the following directory structure:
+
+```
+$HOME/.cargo/localhost-cli/               # Base configuration directory
+├── config.json                           # Server configuration file
+└── sites/                                # Root for all site directories
+    ├── mysite/                           # A site directory
+    │   ├── index.html                    # Default index page
+    │   ├── .default/                     # Default resources (copied from LOCALHOST_RESOURCES)
+    │   │   ├── css/                      # Default stylesheets
+    │   │   ├── js/                       # Default JavaScript files
+    │   │   ├── error/                    # Default error pages
+    │   │   └── ...
+    │   └── cgi-bin/                      # CGI scripts directory
+    │       └── script.py                 # Example CGI script
+    └── another-site/                     # Another site directory
+        └── ...
+```
+
+When a new site is created, default resources are copied from the `LOCALHOST_RESOURCES` directory.
+
+### 🧩 Virtual Hosting: Multiple Personalities Welcome!
+
+<img alt="Hosts" src="https://img.shields.io/badge/Virtual Hosts-Unlimited-blueviolet">
 
 One of Localhost's superpowers is virtual hosting - running multiple websites on a single server:
 
@@ -160,95 +238,74 @@ Each virtual host:
 
 The server automatically adds entries to your hosts file for convenient local development.
 
-## ⚙️ How It Works: Behind the Curtain [![Architecture](https://img.shields.io/badge/Architecture-Event--Driven-informational)](https://github.com/yourusername/localhost#how-it-works)
+### 🔧 CGI Configuration
+<img alt="CGI" src="https://img.shields.io/badge/CGI-Supported-brightgreen">
+
+To enable CGI scripts in your site:
+
+1. Create a `cgi-bin` directory in your site folder (or use the CLI to do this)
+2. Add CGI configuration to your route:
+
+```json
+"cgi": {
+  "script_file_name": "script.py"
+}
+```
+
+The script will be executed from the cgi-bin directory. CGI scripts can:
+
+- Access environment variables like normal CGI programs
+- Return custom headers and content
+- Set status codes (using "Status: code" header)
+
+
+### ⚙️ How It Works: Behind the Curtain
+
+<img alt="Architecture" src="https://img.shields.io/badge/Architecture-Event--Driven-informational">
 
 Localhost uses an event-driven architecture powered by epoll:
 
-<div align="center">
-  <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Magnifying%20Glass%20Tilted%20Left.png" alt="Magnifying Glass" width="80" />
-</div>
+<div align="center"> <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Magnifying%20Glass%20Tilted%20Left.png" alt="Magnifying Glass" width="80" /> </div>
 
-1. **Event Loop**: Efficiently waits for network events
+1. **Event Loop**: Efficiently waits for network events using epoll
 2. **Connection Handling**: Non-blocking I/O for maximum throughput
-3. **Request Parsing**: Fast HTTP parsing with sensible timeouts
+3. **Request Parsing**: Fast HTTP parsing with support for chunked encoding
 4. **Route Matching**: Directs requests to appropriate handlers
 5. **Response Generation**: Delivers content with proper headers
+6. **Error Handling**: Sophisticated error handling with custom error pages
 
 All of this happens asynchronously without blocking threads, giving you maximum performance even under heavy load.
 
-## 🗂️ Project Structure: Finding Your Way Around [![Structure](https://img.shields.io/badge/Structure-Organized-success)](https://github.com/yourusername/localhost#project-structure)
+### 🗂️ Project Structure: Finding Your Way Around
 
-```tree
+<img alt="Structure" src="https://img.shields.io/badge/Structure-Organized-success">
+
+```
 localhost/  
-├── src/                # Code source  
-│   ├── server/        # Fonctionnalités principales du serveur  
-│   │   ├── http/       # Implémentation du protocole HTTP  
-│   │   ├── core/       # Gestion du serveur et des fonctionnalités de base  
-│   │   │   ├── host.rs       # Implémentation des hôtes virtuels  
-│   │   │   ├── handlers.rs   # Gestionnaires de requêtes  
-│   │   │   ├── session.rs    # Gestion des sessions  
-│   │   │   └── ...           # Autres composants du serveur  
-│   ├── config/       # Gestion de la configuration  
-├── static/            # Fichiers statiques  
-├── uploads/           # Répertoire des fichiers téléchargés  
-├── errors/            # Pages d'erreur personnalisées  
-└── config.json        # Configuration du serveur  
+├── src/                      # Source code  
+│   ├── bin/                  # Binary entrypoints
+│   │   ├── cli.rs            # CLI tool for site management
+│   │   └── server.rs         # Server implementation
+│   ├── server/               # Server functionality  
+│   │   ├── cgi.rs            # CGI script handling
+│   │   ├── connection.rs     # Connection management
+│   │   ├── errors.rs         # Error types and handlers
+│   │   ├── handlers.rs       # Request handlers
+│   │   ├── host.rs           # Virtual host implementation
+│   │   ├── logger.rs         # Logging utilities
+│   │   ├── route.rs          # Route configuration and matching
+│   │   ├── server.rs         # Core server functionality
+│   │   ├── session.rs        # Session management
+│   │   ├── static_files.rs   # Static file serving
+│   │   ├── stream.rs         # Stream handling
+│   │   └── uploader.rs       # File upload handling
+│   ├── http/                 # HTTP protocol implementation
+│   ├── config/               # Configuration management
+│   └── .default/             # Default resources
+└── localhost-config-docs/    # Documentation for configuration
 ```
 
----
+### 📝 Technical Details: For the Curious Minds
 
-## 📝 Technical Details: For the Curious Minds [![Tech Stack](https://img.shields.io/badge/Tech%20Stack-Rust-orange)](https://github.com/yourusername/localhost#technical-details)
-
-<div align="center">
-  <table>
-    <tr>
-      <td align="center"><img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Wrench.png" width="40"/></td>
-      <td><b>Language</b>: Rust</td>
-    </tr>
-    <tr>
-      <td align="center"><img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Gear.png" width="40"/></td>
-      <td><b>Architecture</b>: Event-driven with epoll</td>
-    </tr>
-    <tr>
-      <td align="center"><img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Travel%20and%20places/Globe%20with%20Meridians.png" width="40"/></td>
-      <td><b>HTTP Support</b>: HTTP/1.1 with keep-alive</td>
-    </tr>
-    <tr>
-      <td align="center"><img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Link.png" width="40"/></td>
-      <td><b>Connection Model</b>: Non-blocking I/O</td>
-    </tr>
-    <tr>
-      <td align="center"><img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Key.png" width="40"/></td>
-      <td><b>Session Storage</b>: In-memory with configurable options</td>
-    </tr>
-    <tr>
-      <td align="center"><img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/File%20Folder.png" width="40"/></td>
-      <td><b>File Handling</b>: Optimized static file serving with directory listings</td>
-    </tr>
-    <tr>
-      <td align="center"><img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Page%20with%20Curl.png" width="40"/></td>
-      <td><b>CGI Support</b>: Execute dynamic scripts in multiple languages</td>
-    </tr>
-    <tr>
-      <td align="center"><img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Card%20File%20Box.png" width="40"/></td>
-      <td><b>Configuration</b>: JSON-based with extensive validation</td>
-    </tr>
-  </table>
-</div>
-
-<div align="center">
-  <a href="https://github.com/yourusername/localhost/stargazers">
-    <img src="https://img.shields.io/github/stars/yourusername/localhost?style=for-the-badge&color=yellow" alt="Stars" />
-  </a>
-  <a href="https://github.com/yourusername/localhost/network/members">
-    <img src="https://img.shields.io/github/forks/yourusername/localhost?style=for-the-badge&color=orange" alt="Forks" />
-  </a>
-  <a href="https://github.com/yourusername/localhost/issues">
-    <img src="https://img.shields.io/github/issues/yourusername/localhost?style=for-the-badge&color=red" alt="Issues" />
-  </a>
-</div>
-
-<div align="center">
-  <p>Made with ❤️ by passionate developers</p>
-  <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Party%20Popper.png" alt="Party Popper" width="100" />
-</div>
+<img alt="Tech Stack" src="https://img.shields.io/badge/Tech Stack-Rust-orange">
+<div align="center"> <table> <tr> <td align="center"><img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Wrench.png" width="40"/></td> <td><b>Language</b>: Rust</td> </tr> <tr> <td align="center"><img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Gear.png" width="40"/></td> <td><b>Architecture</b>: Event-driven with epoll</td> </tr> <tr> <td align="center"><img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Travel%20and%20places/Globe%20with%20Meridians.png" width="40"/></td> <td><b>HTTP Support</b>: HTTP/1.1 with keep-alive and chunked transfer encoding</td> </tr> <tr> <td align="center"><img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Link.png" width="40"/></td> <td><b>Connection Model</b>: Non-blocking I/O with configurable request size limits</td> </tr> <tr> <td align="center"><img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Key.png" width="40"/></td> <td><b>Session Storage</b>: In-memory with extensive configuration options</td> </tr> <tr> <td align="center"><img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/File%20Folder.png" width="40"/></td> <td><b>File Handling</b>: Optimized static file serving with MIME type detection</td> </tr> <tr> <td align="center"><img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Page%20with%20Curl.png" width="40"/></td> <td><b>CGI Support</b>: Execute dynamic scripts with environment variable passing</td> </tr> <tr> <td align="center"><img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Card%20File%20Box.png" width="40"/></td> <td><b>Configuration</b>: JSON-based with extensive validation and a friendly CLI</td> </tr> </table> </div> <div align="center"> <a href="https://github.com/yourusername/localhost/stargazers"> <img src="https://img.shields.io/github/stars/yourusername/localhost?style=for-the-badge&color=yellow" alt="Stars" /> </a> <a href="https://github.com/yourusername/localhost/network/members"> <img src="https://img.shields.io/github/forks/yourusername/localhost?style=for-the-badge&color=orange" alt="Forks" /> </a> <a href="https://github.com/yourusername/localhost/issues"> <img src="https://img.shields.io/github/issues/yourusername/localhost?style=for-the-badge&color=red" alt="Issues" /> </a> </div> <div align="center"> <p>Made with ❤️ by passionate developers</p> <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Party%20Popper.png" alt="Party Popper" width="100" /> </div>

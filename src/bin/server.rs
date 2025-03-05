@@ -1,28 +1,28 @@
 #![allow(warnings)]
 
-mod http;
-mod server;
-mod config;
+use clap::error;
+use localhost::server;
+use localhost::http;
+use localhost::config;
 
 use std::collections::HashMap;
-use std::fs::{OpenOptions};
-use std::io::{Write, BufRead, BufReader};
-use server::server::Server;
-use server::errors::ServerError;
-use server::{session, static_files};
-use crate::server::host::Host;
-use crate::server::static_files::{ServerStaticFiles, ErrorPages};
-use core::error;
+use std::fs::OpenOptions;
+use std::io::{BufRead, BufReader, Write};
+use std::path::{Path, PathBuf};
+
 use chrono::Local;
-use std::path::Path;
-use std::path::PathBuf;
-use crate::http::request::HttpMethod;
+
+use server::errors::ServerError;
+use server::server::Server;
+use crate::server::host::Host;
+use crate::server::static_files::{ErrorPages, ServerStaticFiles};
 use crate::server::uploader::Uploader;
 use crate::server::route::{Route, RouteMatcher};
 use crate::server::cgi::CGIConfig;
 use crate::server::logger::{Logger, LogLevel};
 use crate::config::config::ServerConfig;
-use crate::server::session::session::{SessionManager, MemorySessionStore};
+use crate::server::session::session::{MemorySessionStore, SessionManager};
+use crate::http::request::HttpMethod;
 
 
 
@@ -39,7 +39,6 @@ const BANNER: &str = r#"
 ║   🚀 Server Initialization Details                                        ║
 ║   • Timestamp:     {current_time}                                    ║
 ║   • Environment:   {environment}                                            ║
-║   • Mode:          {mode}                                                  ║
 ║   • Hosts:         {host_count}                                                      ║
 ║   • Upload Dir:    {upload_dir}                                         ║
 ╚═══════════════════════════════════════════════════════════════════════════╝
@@ -53,7 +52,6 @@ fn display_banner(host_count: usize, upload_dir: &str, warn: bool) {
     let banner = BANNER
         .replace("{current_time}", &current_time)
         .replace("{environment}", environment)
-        .replace("{mode}", mode)
         .replace("{host_count}", &host_count.to_string())
         .replace("{upload_dir}", upload_dir);
 
@@ -82,9 +80,27 @@ fn update_hosts_file(server_name: &str, ip_address: &str) -> Result<(), std::io:
     Ok(())
 }
 
+fn sites_dir() -> String {
+    format!("{}/.cargo/localhost-cli/sites", env!("HOME"))
+}
 
-fn main() -> Result<(), ServerError> {
-   print!("{esc}[2J{esc}[1;1H", esc = 27 as char);
+fn convert_m_or_k(max_body_size: Option<String>) -> usize {
+    if let Some(size) = max_body_size {
+        if size.to_ascii_lowercase().ends_with("k") {
+            size[..size.len() - 1].parse::<usize>().unwrap_or(1024) * 1024
+        } else if size.to_ascii_lowercase().ends_with("m") {
+            size[..size.len() - 1].parse::<usize>().unwrap_or(10) * 1024 * 1024
+        } else {
+            size.parse::<usize>().unwrap_or(1024 * 1024 * 10)
+        }
+    } else {
+        1024 * 1024 * 10
+    }
+}
+
+
+fn main() -> Result<(), ServerError> {    
+    print!("{esc}[2J{esc}[1;1H", esc = 27 as char);
     
     let mut active_warn_opt = false;
     let args: Vec<String> = std::env::args().collect(); 
@@ -93,11 +109,11 @@ fn main() -> Result<(), ServerError> {
         active_warn_opt = true;
     };
 
-    
-    let uploader = Uploader::new(Path::new("example/upload").to_path_buf());
+    let uploader = Uploader::new(Path::new(&format!("{}/example/upload", sites_dir())).to_path_buf());
 
     let mut servers = Server::new(Some(uploader.clone())).unwrap();
     let load_config = ServerConfig::load_and_validate(active_warn_opt);
+
 
     let mut host_count = 0;
 
@@ -105,6 +121,8 @@ fn main() -> Result<(), ServerError> {
         Ok(server_config) => {
             for host_config in server_config.servers {
                 let mut routes: Vec<Route> = Vec::new();
+                let mut error_pages: Option<ErrorPages> = None;
+                let max_request_size= convert_m_or_k(host_config.client_max_body_size); 
 
                 if let Some(tab_routes) = host_config.routes {
                     for r in tab_routes {
@@ -112,7 +130,7 @@ fn main() -> Result<(), ServerError> {
                             .flat_map(|v| v.iter().map(|m| HttpMethod::from_str(m)))
                             .collect::<Vec<HttpMethod>>();
     
-                        let error_pages = if let Some(ref pages) = host_config.error_pages {
+                        error_pages = if let Some(ref pages) = host_config.error_pages {
                             Some(ErrorPages {
                                 custom_pages: pages.custom_pages.clone(),
                             })
@@ -120,9 +138,10 @@ fn main() -> Result<(), ServerError> {
                             None
                         };
 
+                        let root_dir = r.root.clone().unwrap_or("".to_string());
     
                         let results = ServerStaticFiles::new(
-                            PathBuf::from(r.root.unwrap_or("".to_string())), r.default_page, r.directory_listing.unwrap_or(false), error_pages);
+                            PathBuf::from(r.root.unwrap_or("".to_string())), r.default_page, r.directory_listing.unwrap_or(false), error_pages.clone());
     
                         let static_files = match results {
                             Ok(files) => Some(files),
@@ -133,8 +152,9 @@ fn main() -> Result<(), ServerError> {
                         };
     
                         let cgi_config = 
-                            if let Some(cgi) = r.cgi {
-                                Some(CGIConfig::new(cgi.script_path))
+                        if let Some(cgi) = r.cgi {
+                                let script_path = format!("{}/{}/cgi-bin/{}", sites_dir(), root_dir, cgi.script_file_name);
+                                Some(CGIConfig::new(script_path))
                             } else {
                                 None
                             };
@@ -164,8 +184,10 @@ fn main() -> Result<(), ServerError> {
                     host_config.server_address.as_deref().unwrap_or(""),
                     host_config.server_name.as_deref().unwrap_or(""),
                     host_config.ports.unwrap_or_default(),
-                    routes,
+                    routes.clone(),
                     session_manager.clone(),
+                    error_pages,
+                    Some(max_request_size),
                 ).unwrap();
 
                 if session_manager.is_some() {

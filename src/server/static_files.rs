@@ -1,8 +1,15 @@
 use std::{
-    collections::HashMap, fs, io::{self, Read}, path::{Path, PathBuf}
+    collections::HashMap, fs, io::{self, Read}, path::{Path, PathBuf}, env
 };
 use mime_guess::from_path;
 use serde_json::{json, Value};
+use crate::server::errors::ServerError;
+
+// sites directory prefix
+
+pub fn sites_dir() -> String {
+    format!("{}/.cargo/localhost-cli/sites", env!("HOME"))
+}
 
 /// Type alias for MIME type strings
 pub type mime = String;
@@ -25,10 +32,10 @@ pub struct ErrorPages {
 #[derive(Debug, Clone)]
 pub struct ServerStaticFiles {
     pub directory: PathBuf,
-    index: Option<String>,
+    pub index: Option<String>,
     pub allow_directory_listing: bool,
-    error_pages: Option<ErrorPages>,
-    status: FileStatus,
+    pub error_pages: Option<ErrorPages>,
+    pub status: FileStatus,
 }
 
 /// Core implementation
@@ -38,23 +45,27 @@ impl ServerStaticFiles {
         index: Option<String>,
         allow_directory_listing: bool,
         error_pages: Option<ErrorPages>,
-    ) -> io::Result<Self> {
+    ) -> Result<Self, ServerError> {
+        let binding = sites_dir();
+        let dir_prefix = Path::new(&binding);
+        let directory = dir_prefix.join(directory);
         // Validate directory exists
         if !directory.exists() {
-            return Err(io::Error::new(
-                io::ErrorKind::NotFound,
-                "Directory not found",
-            ));
+            return Err(ServerError::FileNotFound(directory.clone()));
         }
 
         // Create default directory if missing
         let default_dir = directory.join(".default");
+
         if !default_dir.exists() {
-            fs::create_dir(&default_dir).unwrap();
+            fs::create_dir(&default_dir).map_err(ServerError::from)?;
         }
 
-        let src = std::path::PathBuf::from("src/.default");
-        copy_default_dir(&src, &default_dir);
+        let value = env::var("LOCALHOST_RESOURCES").unwrap_or_else(|_| "src/.default".to_string());
+        let src = std::path::PathBuf::from(value);
+        copy_default_dir(&src, &default_dir).map_err(|e| 
+            ServerError::DirectoryListingError(format!("Failed to copy default directory: {}", e))
+        )?;
 
         Ok(ServerStaticFiles {
             directory,
@@ -65,7 +76,7 @@ impl ServerStaticFiles {
         })
     }
 
-    pub fn serve_static(&mut self, path: &str) -> io::Result<(Vec<u8>, Option<mime>, FileStatus)> {
+    pub fn serve_static(&mut self, path: &str) -> Result<(Vec<u8>, Option<mime>, FileStatus), ServerError> {
         let defaultPath = self.directory.join(".default/index.html");
 
 
@@ -94,9 +105,9 @@ impl ServerStaticFiles {
     }
 
     pub fn is_directory_contain_file(&self, path: &Path) -> bool {
-        if self.directory.join(path).exists() {
-            return true;
-        }
+        // if self.directory.join(path).exists() {
+        //     return true;
+        // }
         self.directory.join(path).is_file()
     }
 }
@@ -104,14 +115,13 @@ impl ServerStaticFiles {
 /// File serving implementation
 impl ServerStaticFiles {
     /// Serves a static file
-    pub fn serve_file(&mut self, path: &Path) -> io::Result<(Vec<u8>, Option<mime>, FileStatus)> {
+    pub fn serve_file(&mut self, path: &Path) -> Result<(Vec<u8>, Option<mime>, FileStatus), ServerError> {
         if !path.is_file() {
-            println!("eerrereerre");
             self.set_status(FileStatus::NotFound);
             if let Some(error_page) = self.error_pages.clone() {
-                println!("OOOOOOOOO KKKKK");
                 if let Some(page) = error_page.custom_pages.get("404") {
-                    return self.serve_file(Path::new(self.directory.join(page).to_str().unwrap()));
+                    let error_page = Path::new(page);
+                    return self.serve_file(error_page);
                 }
             }
             
@@ -119,9 +129,11 @@ impl ServerStaticFiles {
             return self.serve_file(&error_page);    
         }
 
-        let mut file = fs::File::open(path)?;
+        let mut file = fs::File::open(path)
+            .map_err(|e| ServerError::FileNotFound(path.to_path_buf()))?;
         let mut buffer = Vec::new();
-        file.read_to_end(&mut buffer)?;
+        file.read_to_end(&mut buffer)
+            .map_err(ServerError::from)?;
         
         let mime = self.get_mime_type(path);
         Ok((buffer, Some(mime), self.status.clone()))
@@ -136,7 +148,7 @@ impl ServerStaticFiles {
 /// Directory handling implementation
 impl ServerStaticFiles {
     /// Serves a directory listing
-    fn serve_directory(&mut self, path: &Path) -> io::Result<(Vec<u8>, Option<mime>, FileStatus)> {
+    fn serve_directory(&mut self, path: &Path) -> Result<(Vec<u8>, Option<mime>, FileStatus), ServerError> {
         self.write_directory_data(path)?;
 
         let serve_dir_html = self
@@ -148,13 +160,16 @@ impl ServerStaticFiles {
     }
 
     /// Generates directory listing data
-    fn generate_directory_data(&self, dir_path: &Path) -> io::Result<Value> {
+    fn generate_directory_data(&self, dir_path: &Path) -> Result<Value, ServerError> {
         let mut items = Vec::new();
         
-        for entry in fs::read_dir(dir_path)? {
-            let entry = entry?;
+        for entry in fs::read_dir(dir_path).map_err(|e| {
+            ServerError::DirectoryListingError(format!("Failed to read directory {}: {}", 
+                dir_path.display(), e))
+        })? {
+            let entry = entry.map_err(ServerError::from)?;
             let path = entry.path();
-            let metadata = entry.metadata()?;
+            let metadata = entry.metadata().map_err(ServerError::from)?;
             
             items.push(json!({
                 "name": entry.file_name().to_string_lossy(),
@@ -176,7 +191,7 @@ impl ServerStaticFiles {
 
 
     /// Writes directory listing data to a file
-    fn write_directory_data(&self, path: &Path) -> io::Result<()> {
+    fn write_directory_data(&self, path: &Path) -> Result<(), ServerError> {
         let mut structure = std::collections::HashMap::new();
 
         // Generate data for current directory
@@ -187,9 +202,12 @@ impl ServerStaticFiles {
         );
 
         // Generate data for subdirectories
-        for entry in fs::read_dir(path)? {
-            let entry = entry?;
-            if entry.metadata()?.is_dir() {
+        for entry in fs::read_dir(path).map_err(|e| {
+            ServerError::DirectoryListingError(format!("Failed to read directory {}: {}", 
+                path.display(), e))
+        })? {
+            let entry = entry.map_err(ServerError::from)?;
+            if entry.metadata().map_err(ServerError::from)?.is_dir() {
                 let subdir_data = self.generate_directory_data(&entry.path())?;
                 structure.insert(
                     subdir_data["path"].as_str().unwrap_or("/").to_string(),
@@ -201,17 +219,23 @@ impl ServerStaticFiles {
         // Create data.js content
         let js_content = format!(
             "// Generated directory structure\nexport const directoryData = {};",
-            serde_json::to_string_pretty(&structure)?
+            serde_json::to_string_pretty(&structure).map_err(|e| 
+                ServerError::DirectoryListingError(format!("Failed to serialize directory data: {}", e))
+            )?
         );
 
         let data_js_path = self.directory.join(".default/js/directory/data.js");
         if data_js_path.exists() {
-            fs::remove_file(data_js_path)?;
+            fs::remove_file(&data_js_path).map_err(|e| 
+                ServerError::DirectoryListingError(format!("Failed to remove old data file: {}", e))
+            )?;
         }
 
         // Write to file
         let data_js_path = self.directory.join(".default/js/directory/data.js");
-        fs::write(data_js_path, js_content)?;
+        fs::write(data_js_path, js_content).map_err(|e| 
+            ServerError::DirectoryListingError(format!("Failed to write directory data: {}", e))
+        )?;
 
         Ok(())
     }
@@ -221,23 +245,25 @@ impl ServerStaticFiles {
     }
 }
 
-pub fn copy_default_dir(src: &Path, dst: &Path) {
+pub fn copy_default_dir(src: &Path, dst: &Path) -> Result<(), io::Error> {
     if !dst.exists() {
-        fs::create_dir(dst).unwrap();
+        fs::create_dir(dst)?;
     }
 
-    for entry in fs::read_dir(src).unwrap() {
-        let entry = entry.unwrap();
-        let file_type = entry.file_type().unwrap();
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let file_type = entry.file_type()?;
 
         let src_path = entry.path();
         let dst_path = dst.join(entry.file_name());
 
         if file_type.is_dir() {
-            copy_default_dir(&src_path, &dst_path);
+            copy_default_dir(&src_path, &dst_path)?;
         } else if file_type.is_file() {
-            fs::copy(&src_path, &dst_path).unwrap();
+            fs::copy(&src_path, &dst_path)?;
         }
     }
+
+    Ok(())
 }
 
